@@ -1766,7 +1766,7 @@ function startGame() {
 }
 
 function backToSetup() {
-  if (ONLINE.on || NET.room) onlineLeave();
+  if (ONLINE.on || NET.room) onlineLeave(NET.started);
   $('hud').hidden = true; $('over').hidden = true; $('setup').hidden = false;
   G.levelKey = S.level; G.diffKey = S.diff; G.players = currentPlayers();
   startRound(true);
@@ -1852,7 +1852,7 @@ let quitTimer = null;
 $('btnMenu').onclick = function () {
   const b = $('btnMenu');
   if (quitTimer) { clearTimeout(quitTimer); quitTimer = null; b.textContent = 'Menu'; backToSetup(); return; }
-  b.textContent = 'Quit game?';
+  b.textContent = ONLINE.on ? 'Leave game?' : 'Quit game?';
   quitTimer = setTimeout(function () { quitTimer = null; b.textContent = 'Menu'; }, 3000);
 };
 
@@ -1867,6 +1867,7 @@ function showRoundOver() {
     n.textContent = p[i].name; b.textContent = sc[i]; d.appendChild(n); d.appendChild(b); $('overScores').appendChild(d);
   });
   $('btnNext').textContent = matchWin ? 'Play again' : 'Next round';
+  $('btnSetup').textContent = ONLINE.on ? 'Leave game' : 'Change setup';
   $('over').hidden = false;
 }
 
@@ -2035,7 +2036,17 @@ function firebaseRoomApi() {
    from one shared seed. The notes ride on the room's presence (each phone's small shared "profile" object). */
 
 const NET_ID = /^g-[a-z0-9]{6,12}$/;
-const HOST_KEY = 'rooftopBananas.hostGame.v1';
+const LAST_KEY = 'rooftopBananas.lastGame.v1';
+/* The last online game this phone was in, so leaving by accident (or closing the page) is never final. */
+function saveLast(id, role) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: id, role: role })); } catch (e) {} }
+function forgetLast() { try { localStorage.removeItem(LAST_KEY); } catch (e) {} }
+function loadLast() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
+    if (o && NET_ID.test(o.id) && (o.role === 'host' || o.role === 'guest')) return o;
+  } catch (e) {}
+  return null;
+}
 const DIRS = { l: 'left', r: 'right', u: 'up', d: 'down' };
 
 function pub(patch) { if (NET.room) NET.room.presence(patch).catch(function () {}); }
@@ -2074,15 +2085,15 @@ async function openRoom(id, role) {
   NET.unsubs = [room.onPeers(refreshNet), room.onConnection(syncNote)];
 }
 
-async function onlineLeave() {
+async function onlineLeave(keep) {
   const room = NET.room, unsubs = NET.unsubs || [];
   NET.room = null; NET.started = false; NET.opp = null; ONLINE.on = false; ONLINE.oppHere = true; ONLINE.applying = false;
   NET.log = []; NET.applied = 0;
   $('netNote').hidden = true;
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
-  try { localStorage.removeItem(HOST_KEY); } catch (e) {}
+  if (!keep) forgetLast();
   if (room) { try { await room.leave(); } catch (e) {} }
-  $('btnResume').hidden = true;
+  $('btnResume').hidden = !(keep && loadLast());
 }
 
 function netError(text, code) {
@@ -2099,7 +2110,7 @@ async function hostOnline(resumeId) {
   try {
     await openRoom(id, 'host');
   } catch (e) { netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
-  try { localStorage.setItem(HOST_KEY, id); } catch (e) {}
+  saveLast(id, 'host');
   pub(Object.assign(profPatch(NET.prof), { role: 'host' }));
   showOnly('lobby');
   $('lbTitle').textContent = resumeId ? 'Rejoining your game' : 'Invite a friend';
@@ -2112,6 +2123,7 @@ async function hostOnline(resumeId) {
 
 /* ---- guest: arrive from an invite link ---- */
 async function guestOnline(id) {
+  const last = loadLast(), auto = !!(last && last.role === 'guest' && last.id === id);
   NET.prof = cleanProf(S.players[0]);
   showOnly('lobby');
   $('lbTitle').textContent = 'Bad Nanners!';
@@ -2121,6 +2133,7 @@ async function guestOnline(id) {
   try {
     await openRoom(id, 'guest');
   } catch (e) { $('lbText').textContent = ''; netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
+  NET.auto = auto;
   setTimeout(function () {
     if (NET.room && !NET.started && !NET.opp) { $('lbText').textContent = ''; $('lbStatus').textContent = 'Cannot find that game. Ask your friend to keep their game open, then open the link again.'; }
   }, 9000);
@@ -2178,6 +2191,7 @@ function lobbyUpdate(opp) {
   // guest
   if (!opp) return;
   const hostName = profPresence(op).name || 'Your friend';
+  if (!NET.joined && NET.auto) { joinAsGuest(); return; }
   if (!NET.joined) {
     $('lbTitle').textContent = hostName + ' invited you';
     $('lbText').textContent = 'Pick your look, then tap Join.';
@@ -2235,6 +2249,7 @@ function mergeLog(op) {
   if (lg.length <= NET.log.length) return;
   for (let i = 0; i < NET.log.length; i++) if (lg[i] !== NET.log[i]) return;    // not a continuation of my history
   for (let i = NET.log.length; i < lg.length; i++) NET.log.push(lg[i]);
+  publishLog();      // pass the full history on, so a phone that joins later can get it from me
 }
 
 /* Run the game forward without drawing, until it is waiting for the next action. */
@@ -2327,24 +2342,27 @@ function syncNote() {
 /* ---- buttons ---- */
 $('btnOnline').onclick = function () { $('onlineMsg').textContent = ''; hostOnline(null); };
 $('btnResume').onclick = function () {
-  let id = null;
-  try { id = localStorage.getItem(HOST_KEY); } catch (e) {}
-  if (id && NET_ID.test(id)) { $('onlineMsg').textContent = ''; hostOnline(id); }
+  const last = loadLast();
+  if (!last) return;
+  $('onlineMsg').textContent = '';
+  if (last.role === 'host') hostOnline(last.id); else guestOnline(last.id);
 };
-$('btnLbLeave').onclick = function () { onlineLeave(); showOnly('setup'); startRound(true); };
+$('btnLbLeave').onclick = function () { onlineLeave(false); showOnly('setup'); startRound(true); };
+function joinAsGuest() {
+  NET.joined = true;
+  saveLast(NET.id, 'guest');
+  pub(Object.assign(profPatch(NET.prof), { role: 'guest' }));
+  $('lbGuest').hidden = true; $('btnLbGo').hidden = true; $('lbText').textContent = '';
+  $('lbStatus').textContent = 'Joined. Waiting for the host to start…';
+  refreshNet();
+}
 $('btnLbGo').onclick = function () {
   if (NET.role === 'host') {
     if (!NET.opp) return;
     const cfg = [S.level, S.diff, S.firstTo, Math.floor(Math.random() * 1e9)].join('|');
     NET.ep = 0;
     startOnline(cfg, NET.prof, profPresence(NET.opp.presence));
-  } else {
-    NET.joined = true;
-    pub(Object.assign(profPatch(NET.prof), { role: 'guest' }));
-    $('lbGuest').hidden = true; $('btnLbGo').hidden = true; $('lbText').textContent = '';
-    $('lbStatus').textContent = 'Joined. Waiting for the host to start…';
-    refreshNet();
-  }
+  } else joinAsGuest();
 };
 $('btnCopy').onclick = function () {
   const el = $('lbLink'), btn = $('btnCopy');
@@ -2364,7 +2382,11 @@ $('gGor').onchange = function () { NET.prof.gorilla = $('gGor').value; NET.prof.
   });
   let hash = '';
   try { hash = (location.hash || '').replace('#', ''); } catch (e) {}
-  if (NET_ID.test(hash)) { guestOnline(hash); return; }
-  try { if (localStorage.getItem(HOST_KEY)) $('btnResume').hidden = false; } catch (e) {}
+  const last = loadLast();
+  if (NET_ID.test(hash)) {
+    if (last && last.role === 'host' && last.id === hash) hostOnline(hash); else guestOnline(hash);   // your own link brings you back as the host
+    return;
+  }
+  if (last) $('btnResume').hidden = false;
 })();
 </script></body></html>
