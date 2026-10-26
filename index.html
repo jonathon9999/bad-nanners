@@ -54,6 +54,7 @@ button { cursor: pointer; }
 }
 .chip.active { border-color: var(--banana); }
 .chip .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .st { font-size: 14px; white-space: nowrap; }
 .chip .sc { font-family: var(--font-display); font-size: 20px; color: var(--banana); font-variant-numeric: tabular-nums; }
 #wind {
   flex: 0 0 auto; align-self: center; display: flex; flex-direction: column; align-items: center; line-height: 1.1;
@@ -70,6 +71,7 @@ button { cursor: pointer; }
 #netNote { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 6; pointer-events: none; background: var(--panel-solid); border: 2px solid var(--banana); border-radius: 12px; padding: 8px 14px; font-weight: 700; text-align: center; max-width: 86vw; }
 #lbLinkBox .lbl { display: block; margin-bottom: 6px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 #lbLinkBox .row.end input { flex: 1 1 200px; min-width: 0; }
+#banner .sub { display: block; margin-top: 6px; font-family: var(--font-body); font-size: clamp(15px, 3.8vw, 22px); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.6); }
 #banner {
   position: absolute; left: 0; right: 0; top: 24%; text-align: center; pointer-events: none; opacity: 0;
   font-family: var(--font-display); font-size: clamp(26px, 7vw, 54px); color: var(--banana);
@@ -139,7 +141,8 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
 /* ---- moving ---- */
 .side { min-height: 44px; padding: 4px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); font-weight: 600; }
 .side:active { background: var(--line); }
-#controls.moving .aim, #controls.moving #btnThrow, #controls.moving #btnMoveMode { display: none; }
+.side:disabled { opacity: 0.4; }
+#controls.moving .aim, #controls.moving #btnThrow, #controls.moving #btnMoveMode, #controls.moving #btnShake { display: none; }
 .movepad { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: 100%; }
 .mv { min-height: 46px; min-width: 104px; padding: 4px 12px; border-radius: 10px; border: 2px solid var(--banana); background: var(--field); font-weight: 700; }
 .mv.off { border-color: var(--line); opacity: 0.45; }
@@ -165,7 +168,7 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
   .bn b { font-size: 13px; }
   .mv { min-height: 38px; min-width: 84px; font-size: 13px; }
   .side { min-height: 38px; padding: 2px 10px; }
-  #btnMoveMode { order: 4; flex: 0 0 auto; }
+  #btnMoveMode, #btnShake { order: 4; flex: 0 0 auto; }
   .movepad p { flex: 1 1 auto; text-align: left; }
   #btnThrow { order: 5; margin-left: auto; height: 44px; padding: 0 22px; font-size: 16px; flex: 0 0 auto; }
 }
@@ -176,9 +179,9 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
 <div id="hud" hidden>
   <div>
     <div id="topbar">
-      <div class="chip" id="chip0"><span class="nm" id="nm0">Player 1</span><span class="sc" id="sc0">0</span></div>
+      <div class="chip" id="chip0"><span class="nm" id="nm0">Player 1</span><span class="st" id="st0"></span><span class="sc" id="sc0">0</span></div>
       <div id="wind"><small>Wind</small><span id="windVal">calm</span></div>
-      <div class="chip" id="chip1"><span class="nm" id="nm1">Player 2</span><span class="sc" id="sc1">0</span></div>
+      <div class="chip" id="chip1"><span class="nm" id="nm1">Player 2</span><span class="st" id="st1"></span><span class="sc" id="sc1">0</span></div>
     </div>
     <div id="tools">
       <button class="mini" id="btnTrack" type="button">Track</button>
@@ -204,8 +207,11 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
     </div>
     <div class="aim" id="bananaRow" role="group" aria-label="Banana type"></div>
     <button class="side" id="btnMoveMode" type="button">Move</button>
+    <button class="side" id="btnShake" type="button">Shake tree</button>
     <button class="primary" id="btnThrow" type="button">Throw</button>
     <div class="movepad" id="movePad" hidden>
+      <button class="mv" type="button" data-j="left">&#8630; Jump left</button>
+      <button class="mv" type="button" data-j="right">Jump right &#8631;</button>
       <button class="mv" type="button" data-m="left">&larr; Left</button>
       <button class="mv" type="button" data-m="right">Right &rarr;</button>
       <button class="mv" type="button" data-m="up">&uarr; Climb up</button>
@@ -380,9 +386,30 @@ const GORILLAS = {
    shots = one entry per banana thrown, angle is the extra tilt in degrees. */
 const BANANAS = {
   classic: { label: 'Classic', uses: Infinity, crater: 24, size: 0.5, gravityScale: 1.0,  color: '#ffd23f', shots: [{ angle: 0 }] },
-  mega:    { label: 'Mega',    uses: 3,        crater: 54, size: 1.1, gravityScale: 1.12, color: '#ffb000', shots: [{ angle: 0 }] },
-  triple:  { label: 'Triple',  uses: 3,        crater: 20, size: 0.6, gravityScale: 1.0,  color: '#ffe680', shots: [{ angle: -4 }, { angle: 0 }, { angle: 4 }] }
+  mega:    { label: 'Big Nana',     uses: 3,    crater: 54, size: 1.1, gravityScale: 1.12, color: '#ffb000', shots: [{ angle: 0 }] },
+  /* Banana Split: flies as one banana, then splits into three at the top of its arc.
+     spread = how fast the side pieces drift apart (game units per second). */
+  triple:  { label: 'Banana Split', uses: 3,    crater: 20, size: 0.8, gravityScale: 1.0,  color: '#ffe680', shots: [{ angle: 0 }],
+             split: { pieces: [-1, 0, 1], spread: 85, size: 0.6 } }
 };
+
+/* Jumping (the Move button's long hop to the next rooftop) */
+const JUMP = {
+  maxRise: 130,          // the tallest step up a gorilla can jump, in game units
+  safeGap: 50,           // gaps up to this width are always cleared
+  riskPerUnit: 0.004,    // chance of falling short grows by this much per unit of gap beyond safeGap
+  maxRisk: 0.6
+};
+
+/* Shake the Tree: what can fall out. weight = how likely, relative to the others.
+   A prize can only be won once per round per gorilla. Turn counts are the owner's own turns. */
+const PRIZES = [
+  { id: 'bonus',    weight: 30, short: 'Bonus nanners!', text: '+2 Big Nana or +2 Banana Split' },
+  { id: 'umbrella', weight: 20, turns: 3, short: 'Umbrella!', text: 'Hits bounce off you for 3 turns' },
+  { id: 'shrink',   weight: 15, short: 'Shrink-nanner!', text: 'You are tiny for the rest of the round' },
+  { id: 'scope',    weight: 15, turns: 3, short: 'Nanner scope!', text: 'You see the whole city for 3 turns' },
+  { id: 'dud',      weight: 20, short: 'Just leaves...', text: 'And a very annoyed sloth' }
+];
 
 /* Background music: a bouncy jungle oom-pah, played by the phone's synthesizer.
    melody has 8 steps per bar (a dash is a rest). bass, bassFifth and chords have one entry per bar. */
@@ -425,6 +452,13 @@ const SOUNDS = {
   move:        [{ noise: true, time: 0.06, vol: 0.3, lowpass: 600 }, { noise: true, time: 0.06, vol: 0.3, lowpass: 600, at: 0.2 },
                 { noise: true, time: 0.06, vol: 0.3, lowpass: 600, at: 0.4 }, { noise: true, time: 0.06, vol: 0.3, lowpass: 600, at: 0.6 }]
 };
+
+SOUNDS.shake = [];
+[0, 0.09, 0.18, 0.27, 0.36, 0.45].forEach(function (t) { SOUNDS.shake.push({ noise: true, time: 0.08, vol: 0.35, lowpass: 2600, at: t }); });
+SOUNDS.shake.push({ wave: 'triangle', from: 660, time: 0.12, vol: 0.2, at: 0.62 });
+SOUNDS.shake.push({ wave: 'triangle', from: 880, time: 0.22, vol: 0.2, at: 0.72 });
+SOUNDS.boing = [{ wave: 'sine', from: 180, to: 900, time: 0.28, vol: 0.28, vibrato: [18, 50] }, { noise: true, time: 0.06, vol: 0.2, lowpass: 3000 }];
+SOUNDS.split = [{ wave: 'triangle', from: 900, to: 1400, time: 0.12, vol: 0.18 }, { wave: 'triangle', from: 1100, to: 1700, time: 0.12, vol: 0.15, at: 0.08 }];
 
 /* The winning gorilla: "ooh ooh ooh" hoots with a chest-thumping drum roll underneath. */
 SOUNDS.win = [];
@@ -731,7 +765,7 @@ function collide(world, b) {
     if (i === b.owner && b.age < 0.35) continue;
     const rx = g.w / 2 + b.r * 0.6, ry = g.h / 2 + b.r * 0.6;
     const dx = (b.x - g.x) / rx, dy = (b.y - (g.y - g.h / 2)) / ry;
-    if (dx * dx + dy * dy <= 1) return { type: 'gorilla', index: i };
+    if (dx * dx + dy * dy <= 1) return { type: g.umbrella > 0 ? 'umbrella' : 'gorilla', index: i };
   }
   if (solidAt(world.mask, world.W, world.H, b.x, b.y)) return { type: 'building' };
   return null;
@@ -808,6 +842,26 @@ function planMove(g, action, mask, W, H, stepRoof, stepClimb, maxClimb) {
     return { err: 'The roof is damaged there.' };
   }
   return { slot: slot, depth: depth, spot: s };
+}
+
+/* ---- jumping: a long hop to the neighbouring rooftop ---- */
+
+/* Work out one jump ('left' or 'right'). Returns { err } or where he lands and how risky the gap is. */
+function planJump(g, dir, buildings, gorillas, mask, W, H) {
+  if (g.wall || g.depth > 0) return { err: 'You are hanging on the wall. Climb up first.' };
+  const idx = buildings.indexOf(g.b), ni = idx + (dir === 'left' ? -1 : 1);
+  if (ni < 0 || ni >= buildings.length) return { err: 'Nothing to jump to that way.' };
+  const nb = buildings[ni];
+  for (const o of gorillas) if (o !== g && !o.falling && o.b === nb) return { err: 'Another gorilla is already up there.' };
+  const x = nb.w < 50 ? nb.x + nb.w / 2 : (dir === 'right' ? nb.x + 24 : nb.x + nb.w - 24);
+  let top = -1;
+  for (let y = 0; y < H; y++) { if (solidAt(mask, W, H, x, y)) { top = y; break; } }
+  if (top < 0 || top >= H - 2) return { err: 'That building is gone. Nothing to land on.' };
+  if (g.y - top > JUMP.maxRise) return { err: 'Too high to jump up there.' };
+  if (!checkSupport(mask, W, H, { x: x, y: top, w: 34, wall: false }, GAME.supportDepth).supported) return { err: 'That roof is too damaged to land on.' };
+  const gap = dir === 'right' ? nb.x - (g.b.x + g.b.w) : g.b.x - (nb.x + nb.w);
+  const risk = Math.max(0, Math.min(JUMP.maxRisk, (gap - JUMP.safeGap) * JUMP.riskPerUnit));
+  return { ni: ni, nb: nb, x: x, y: top, gap: gap, risk: risk };
 }
 
 function launchVelocity(aim, speedMax, extraDeg) {
@@ -1238,6 +1292,23 @@ function drawWindFx(c, G, w, h) {
     }
   }
 }
+
+/* A bright umbrella held over a gorilla's head. */
+function drawUmbrella(c, g, t) {
+  const r = Math.max(22, g.w * 0.95), top = g.y - g.h - 14 + Math.sin(t * 3 + g.x) * 1.5;
+  c.save();
+  c.strokeStyle = '#2a2100'; c.lineWidth = 2.5; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(g.x, top); c.lineTo(g.x, top + g.h * 0.45); c.stroke();
+  const cols = ['#ff5c6c', '#ffd23f'];
+  for (let i = 0; i < 4; i++) {                                   // four coloured wedges
+    const a0 = Math.PI + i * Math.PI / 4, a1 = a0 + Math.PI / 4;
+    c.fillStyle = cols[i % 2];
+    c.beginPath(); c.moveTo(g.x, top + 4); c.arc(g.x, top + 4, r, a0, a1); c.closePath(); c.fill();
+  }
+  c.strokeStyle = '#2a2100'; c.lineWidth = 2;
+  c.beginPath(); c.arc(g.x, top + 4, r, Math.PI, 0); c.closePath(); c.stroke();
+  c.restore();
+}
 /* ---------------- game state ---------------- */
 /* Online play: both phones run the same game and replay each other's throws. See 07-online.js. */
 const ONLINE = { on: false, me: 0, applying: false, seed: 0, matchNo: 0, oppHere: true };
@@ -1279,7 +1350,11 @@ function resetPlayerRound(p, i) {
   for (const k in BANANAS) p.uses[k] = BANANAS[k].uses;
   p.bananaKey = 'classic';
   p.lastPaths = [];
+  p.fx = { umbrella: 0, scope: 0, shrink: false, shook: false };   // tree prizes: umbrella and scope count the owner's turns
 }
+
+/* Let the core rules see who holds an umbrella. */
+function syncFx() { G.gorillas.forEach(function (g, i) { g.umbrella = G.players[i].fx.umbrella; }); }
 
 /* Build a new city and put both gorillas on their roofs. */
 function startRound(menuMode) {
@@ -1323,6 +1398,7 @@ function startRound(menuMode) {
   for (let i = 0; i < 38; i++) G.windFx.push({ x: rnd(), y: rnd(), s: 0.5 + rnd() * 0.6 });
   G.bananas = []; G.particles = []; G.flashes = []; G.result = null; G.lastImpact = null; G.shake = 0;
   G.players.forEach(resetPlayerRound);
+  syncFx();
   G.turn = G.round % 2;
   G.fresh = true;
   G.zoom = 1;
@@ -1347,7 +1423,13 @@ function beginTurn() {
   if (ONLINE.on) onlineTurnStart();
 }
 
-function nextTurn() { G.turn = 1 - G.turn; beginTurn(); }
+function nextTurn() {
+  const q = G.players[G.turn].fx;                       // the turn that just ended counts against umbrella and scope
+  if (q.umbrella > 0) q.umbrella--;
+  if (q.scope > 0) q.scope--;
+  syncFx();
+  G.turn = 1 - G.turn; beginTurn();
+}
 
 /* A hanging gorilla keeps facing the wall; a roof gorilla faces the way he is aiming. */
 function aimFacing(g, dir) { return g.wall ? -g.toward : dir; }
@@ -1366,6 +1448,62 @@ function doMove(action) {
   lockControls(true);
   setMoveMode(false);
   playSound('move');
+}
+
+/* A long hop to the next rooftop. Uses the whole turn. A wide gap can leave him short. */
+function doJump(dir) {
+  if (G.state !== 'aim' || !mine()) return;
+  snapGorillas();
+  const g = G.gorillas[G.turn];
+  const plan = planJump(g, dir, G.buildings, G.gorillas, G.mask, G.W, G.H);
+  if (plan.err) { setMoveHint(plan.err); playSound('click'); return; }
+  if (ONLINE.on && !ONLINE.applying) onlineLog('j' + dir.charAt(0));
+  const short = plan.risk > 0 && G.rnd() < plan.risk;
+  const sgn = dir === 'right' ? 1 : -1;
+  const gapX = (dir === 'right' ? g.b.x + g.b.w : g.b.x) + sgn * plan.gap * 0.5;
+  g.move = { fx: g.x, fy: g.y, tx: short ? gapX : plan.x, ty: short ? g.y - 6 : plan.y, t: 0, dur: 1.0, jump: true, arc: 70, short: short, plan: plan, dir: sgn };
+  g.settleY = null;
+  G.state = 'moving';
+  lockControls(true);
+  setMoveMode(false);
+  playSound('move');
+}
+
+/* Shake the tree: one try per round. The prize is rolled from the shared random numbers, so every phone gets the same one. */
+function rollPrize() {
+  let total = 0;
+  for (const pz of PRIZES) total += pz.weight;
+  let r = G.rnd() * total;
+  for (const pz of PRIZES) { r -= pz.weight; if (r < 0) return pz; }
+  return PRIZES[PRIZES.length - 1];
+}
+function doShake() {
+  if (G.state !== 'aim' || !mine()) return;
+  const p = G.players[G.turn], g = G.gorillas[G.turn];
+  if (p.fx.shook) return;
+  snapGorillas();
+  if (ONLINE.on && !ONLINE.applying) onlineLog('s');
+  p.fx.shook = true;
+  const pz = rollPrize();
+  let sub = pz.text;
+  if (pz.id === 'bonus') {
+    const key = G.rnd() < 0.5 ? 'mega' : 'triple';
+    p.uses[key] += 2;
+    sub = '+2 ' + BANANAS[key].label;
+  } else if (pz.id === 'umbrella') p.fx.umbrella = pz.turns + 1;
+  else if (pz.id === 'scope') p.fx.scope = pz.turns + 1;
+  else if (pz.id === 'shrink') { p.fx.shrink = true; g.size = p.size * 0.55; g.w = 34 * g.size; g.h = 68 * g.size; }
+  syncFx();
+  g.pose = 'cheer'; g.facing = aimFacing(g, p.aim.dir);
+  burst(g.x, g.y - g.h - 24, 30, ['#5fe3a1', '#2fa36a', '#ffd23f'], 190);
+  G.shake = Math.max(G.shake, 5);
+  G.lastImpact = { x: g.x, y: g.y };
+  showBanner(pz.short, sub);
+  playSound('shake');
+  G.state = 'settle'; G.timer = 1.5;
+  lockControls(true);
+  setMoveMode(false);
+  updateHud();
 }
 
 function doThrow() {
@@ -1407,6 +1545,12 @@ function onImpact(b, hit) {
     G.flashes.push({ x: b.x, y: b.y, r: b.def.crater * 1.6, t: 0, life: 0.35 });
     G.shake = Math.max(G.shake, 4 + b.def.crater * 0.15);
     playSound('hitBuilding');
+  } else if (hit.type === 'umbrella') {
+    const g = G.gorillas[hit.index];
+    burst(b.x, b.y, 18, ['#6cc4ff', '#cfd4e8', '#ffffff'], 220);
+    G.flashes.push({ x: b.x, y: b.y, r: 30, t: 0, life: 0.25 });
+    G.shake = Math.max(G.shake, 3);
+    playSound('boing');
   } else if (hit.type === 'gorilla') {
     const g = G.gorillas[hit.index];
     g.falling = true; g.fell = true; g.pose = 'idle';
@@ -1416,6 +1560,19 @@ function onImpact(b, hit) {
     G.shake = 9;
     playSound('hitGorilla');
   }
+}
+
+/* The Banana Split reaches the top of its arc and breaks into pieces. */
+function splitBanana(b) {
+  const sp = b.def.split, pd = { label: b.def.label, crater: b.def.crater, size: sp.size, gravityScale: b.def.gravityScale, color: b.def.color, shots: b.def.shots };
+  b.didSplit = true;
+  G.flashes.push({ x: b.x, y: b.y, r: 34, t: 0, life: 0.25 });
+  playSound('split');
+  sp.pieces.forEach(function (k) {
+    if (k === 0) { b.def = pd; b.size = sp.size; b.r = 7 * sp.size; return; }
+    G.bananas.push({ x: b.x, y: b.y, vx: b.vx + k * sp.spread, vy: b.vy, gs: b.gs, age: b.age, owner: b.owner, r: 7 * sp.size, size: sp.size,
+      color: b.color, rot: b.rot, spin: b.spin * (k > 0 ? 1.2 : 0.8), def: pd, path: b.path.slice(), pathT: 0, didSplit: true });
+  });
 }
 
 function stepFlight(dt) {
@@ -1429,6 +1586,7 @@ function stepFlight(dt) {
       b.rot += b.spin * sub;
       b.pathT += sub;
       if (b.pathT >= 0.03) { b.pathT = 0; b.path.push([b.x, b.y]); }
+      if (b.def.split && !b.didSplit && b.age > 0.25 && b.vy >= 0) splitBanana(b);
       const hit = b.age > 14 ? { type: 'out' } : collide(G, b);
       if (hit) { onImpact(b, hit); G.bananas.splice(i, 1); }
     }
@@ -1500,8 +1658,24 @@ function update(dt) {
     m.t += dt;
     const u = Math.min(1, m.t / m.dur), e = u * u * (3 - 2 * u);
     mg.x = m.fx + (m.tx - m.fx) * e;
-    mg.y = m.fy + (m.ty - m.fy) * e - (m.wall || mg.wall ? 0 : Math.sin(Math.PI * u) * 6);
-    if (u >= 1) {
+    mg.y = m.fy + (m.ty - m.fy) * e - (m.jump ? Math.sin(Math.PI * u) * m.arc : (m.wall || mg.wall ? 0 : Math.sin(Math.PI * u) * 6));
+    if (u >= 1 && m.jump) {
+      mg.x = m.tx; mg.y = m.ty; mg.move = null; mg.pose = 'idle';
+      if (m.short) {                                         // fell short of the next roof
+        mg.falling = true; mg.fell = true; mg.vx = m.dir * 40; mg.vy = 0; mg.spin = m.dir * 2.5;
+        burst(mg.x, mg.y, 20, ['#cfd4e8', '#ffd23f'], 160);
+        G.shake = 6; playSound('fall');
+      } else {                                               // landed: he now lives on the new roof
+        const nb = m.plan.nb;
+        mg.b = nb; mg.roofY = m.ty; mg.wallX = mg.toward > 0 ? nb.x + nb.w : nb.x;
+        mg.maxSlot = Math.max(0, Math.floor((nb.w - 40) / GAME.roofStep));
+        mg.slot = Math.max(0, Math.min(mg.maxSlot, Math.round((perchX(nb, mg.toward) - m.tx) * mg.toward / GAME.roofStep)));
+        mg.depth = 0; mg.wall = false; mg.facing = mg.toward;
+        burst(mg.x, mg.y, 10, ['#cfd4e8', '#ffd23f'], 90);
+      }
+      G.lastImpact = { x: mg.x, y: mg.y };
+      G.state = 'settle'; G.timer = 0.4;
+    } else if (u >= 1) {
       mg.x = m.tx; mg.y = m.ty; mg.slot = m.slot; mg.depth = m.depth; mg.wall = m.wall; mg.move = null;
       mg.facing = mg.wall ? -mg.toward : mg.toward; mg.pose = 'idle';
       G.lastImpact = { x: mg.x, y: mg.y };
@@ -1527,6 +1701,10 @@ function update(dt) {
     for (const b of G.bananas) top = Math.min(top, b.y);
     zt = Math.max(0.55, Math.min(1, GAME.viewHeight / (G.H - top + 110 + G.uiPx / G.view.scale)));
   }
+  const tp = G.players[G.turn];
+  const scoped = G.state !== 'menu' && tp && tp.fx && tp.fx.scope > 0 && (!ONLINE.on || G.turn === ONLINE.me) &&
+    (G.state === 'aim' || G.state === 'moving' || G.state === 'flying' || G.state === 'settle');
+  if (scoped) zt = Math.min(zt, Math.max(0.2, Math.min(1, G.view.w / (G.view.scale * (G.W + 120)))));   // nanner scope: the whole city
   G.zoom += (zt - G.zoom) * Math.min(1, dt * (zt < G.zoom ? 5 : 2.5));
   const vw = G.view.w / (G.view.scale * G.zoom), vh = GAME.viewHeight / G.zoom;
   const reserve = G.state === 'menu' ? 0 : G.uiPx / (G.view.scale * G.zoom);   // keep the action clear of the control panel
@@ -1540,6 +1718,7 @@ function update(dt) {
     tx = sx / G.bananas.length - vw / 2; ty = Math.min(ty, minY - 90); rate = 12;
   } else if (G.state === 'settle' && G.lastImpact) {
     tx = G.lastImpact.x - vw / 2;
+    ty = Math.min(ty, G.lastImpact.y - 55 - (vh - reserve) / 2);   // keep a high impact (or a tree-shaking gorilla) in view
   } else if (G.state === 'falling' || G.state === 'celebrate' || G.state === 'roundover') {
     const f = G.gorillas.find(function (q) { return q.falling && q.y < G.H + 100; }) || G.gorillas.find(function (q) { return !q.fell; }) || g;
     tx = f.x - vw / 2;
@@ -1547,6 +1726,7 @@ function update(dt) {
         tx = g.x - vw / 2;                                  // centre on the player whose turn it is
     ty = Math.min(ty, g.y - 55 - (vh - reserve) / 2);   // and keep their roof in view even on very tall buildings
   }
+  if (scoped) { tx = G.W / 2 - vw / 2; if (G.state === 'aim') ty = G.H - vh + reserve; }
   G.cam.x += (clampCamX(tx) - G.cam.x) * Math.min(1, dt * rate);
   G.cam.y += (ty - G.cam.y) * Math.min(1, dt * (rate + 2));
 }
@@ -1585,14 +1765,17 @@ function render() {
     if (g.y > G.H + 200) continue;
     const pose = g.falling ? 'idle' : (g.wall ? 'hang' : (G.state === 'aim' && g.idx === G.turn && G.dragging ? 'wind' : g.pose));
     drawGorilla(c, g, pose, G.time);
+    const um = !g.falling && g.umbrella > 0;
+    if (um) drawUmbrella(c, g, G.time);
     if (!g.falling && G.state !== 'menu') {
-      c.fillStyle = 'rgba(0,0,0,0.5)'; c.fillText(G.players[g.idx].name, g.x + 1, g.y - g.h - 21);
-      c.fillStyle = '#fff'; c.fillText(G.players[g.idx].name, g.x, g.y - g.h - 22);
+      const lift = um ? 26 : 0;
+      c.fillStyle = 'rgba(0,0,0,0.5)'; c.fillText(G.players[g.idx].name, g.x + 1, g.y - g.h - 21 - lift);
+      c.fillStyle = '#fff'; c.fillText(G.players[g.idx].name, g.x, g.y - g.h - 22 - lift);
     }
   }
   if (G.state === 'aim') {
     const g = G.gorillas[G.turn], p = turnP, aim = p.aim, diff = DIFFICULTIES[G.diffKey];
-    const bob = Math.sin(G.time * 5) * 3, ty = g.y - g.h - 50 + bob;
+    const bob = Math.sin(G.time * 5) * 3, ty = g.y - g.h - 50 + bob - (g.umbrella > 0 ? 30 : 0);
     c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(g.x - 7, ty - 9); c.lineTo(g.x + 7, ty - 9); c.lineTo(g.x, ty); c.closePath(); c.fill();
     const o = handPos(g, aim.dir), ang = aim.elev * Math.PI / 180, len = 22 + aim.power * 0.5;
     const ex = o.x + aim.dir * Math.cos(ang) * len, ey = o.y - Math.sin(ang) * len;
@@ -1773,9 +1956,11 @@ function backToSetup() {
 }
 
 /* ---------------- HUD ---------------- */
-function showBanner(text) {
+function showBanner(text, sub) {
   const el = $('banner');
-  el.textContent = text; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  el.textContent = text;
+  if (sub) { const sp = document.createElement('span'); sp.className = 'sub'; sp.textContent = sub; el.appendChild(sp); }
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
 }
 function lockControls(on) { $('controls').classList.toggle('locked', on); }
 /* Re-check whether this phone may act right now (opponent left, or not your turn). */
@@ -1786,6 +1971,13 @@ function updateHud() {
     $('nm' + i).textContent = G.players[i].name;
     $('sc' + i).textContent = G.scores[i];
     $('chip' + i).classList.toggle('active', G.state === 'aim' && G.turn === i);
+    const fx = G.players[i].fx, st = [];
+    if (fx) {
+      if (fx.umbrella > 0) st.push('\u2602');
+      if (fx.scope > 0) st.push('\uD83D\uDD2D');
+      if (fx.shrink) st.push('\u2193');
+    }
+    $('st' + i).textContent = st.join(' ');
   });
   const w = G.wind;
   const lvl = Math.min(4, Math.ceil(Math.abs(w) / ((DIFFICULTIES[G.diffKey].wind || 4) / 4)));
@@ -1796,6 +1988,7 @@ function refreshAimUI() {
   const p = G.players[G.turn], a = p.aim;
   $('vElev').textContent = a.elev + '° ' + (a.dir > 0 ? '→' : '←');
   $('vPower').textContent = a.power;
+  $('btnShake').disabled = !!(p.fx && p.fx.shook);
   const row = $('bananaRow');
   row.innerHTML = '';
   Object.keys(BANANAS).forEach(function (k) {
@@ -1877,6 +2070,12 @@ function setMoveHint(text) { $('moveHint').textContent = text; }
 function refreshMoveUI() {
   const g = G.gorillas[G.turn];
   document.querySelectorAll('.mv').forEach(function (b) {
+    if (b.dataset.j) {
+      const jp = planJump(g, b.dataset.j, G.buildings, G.gorillas, G.mask, G.W, G.H);
+      b.classList.toggle('off', !!jp.err);
+      b.textContent = b.dataset.label + (!jp.err && jp.risk > 0 ? ' (' + Math.round(jp.risk * 100) + '% fall)' : '');
+      return;
+    }
     const plan = planMove(g, b.dataset.m, G.mask, G.W, G.H, GAME.roofStep, GAME.climbStep, GAME.maxClimb);
     b.classList.toggle('off', !!plan.err);
   });
@@ -1885,12 +2084,16 @@ function refreshMoveUI() {
 function setMoveMode(on) {
   $('controls').classList.toggle('moving', on);
   $('movePad').hidden = !on;
-  if (on) { setMoveHint('Moving uses your whole turn. Climb down to hang from the wall.'); refreshMoveUI(); }
+  if (on) { setMoveHint('Moving uses your whole turn. Jump hops to the next rooftop.'); refreshMoveUI(); }
 }
 
 $('btnMoveMode').onclick = function () { if (G.state === 'aim' && mine()) { audioReady(); playSound('click'); setMoveMode(true); } };
 $('btnMoveBack').onclick = function () { playSound('click'); setMoveMode(false); };
-document.querySelectorAll('.mv').forEach(function (b) { b.onclick = function () { audioReady(); doMove(b.dataset.m); }; });
+document.querySelectorAll('.mv').forEach(function (b) {
+  if (b.dataset.j) b.dataset.label = b.textContent;
+  b.onclick = function () { audioReady(); if (b.dataset.j) doJump(b.dataset.j); else doMove(b.dataset.m); };
+});
+$('btnShake').onclick = function () { audioReady(); doShake(); };
 
 /* ---------------- aiming by dragging ---------------- */
 canvas.addEventListener('pointerdown', function (e) {
@@ -2269,6 +2472,8 @@ function applyEntry(e) {
       p.bananaKey = keys[+parts[2].slice(1)] || 'classic';
       doThrow();
     } else if (e.charAt(0) === 'm') doMove(DIRS[e.charAt(1)] || 'left');
+    else if (e.charAt(0) === 'j') doJump(e.charAt(1) === 'r' ? 'right' : 'left');
+    else if (e.charAt(0) === 's') doShake();
     else if (e.charAt(0) === 'n') advanceRound();
   } finally { ONLINE.applying = false; }
   if (NET.ep === ep0) NET.applied++;      // a new match clears the list, so there is nothing to count
@@ -2309,6 +2514,7 @@ function stateHash() {
   const m = G.mask;
   for (let i = 0; i < m.length; i += 7) h = (h * 31 + m[i]) | 0;
   G.gorillas.forEach(function (g) { h = (h * 31 + Math.round(g.x * 4)) | 0; h = (h * 31 + Math.round(g.y * 4)) | 0; });
+  G.players.forEach(function (p) { const f = p.fx; if (f) h = (h * 31 + f.umbrella * 3 + f.scope * 5 + (f.shrink ? 7 : 0) + (f.shook ? 11 : 0) + p.uses.mega * 13 + p.uses.triple * 17) | 0; });
   h = (h * 31 + G.wind * 7 + G.turn + G.scores[0] * 3 + G.scores[1] * 5 + G.round) | 0;
   return (h >>> 0).toString(36);
 }
