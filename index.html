@@ -306,6 +306,7 @@ const GAME = {
   dragForFullPower: 150, // how far (in screen pixels) you drag for 100% power
   worldHeight: 640,      // height of the city in game units
   viewHeight: 560,       // how much of the city height fits on screen
+  viewHeightLandscape: 400, // same, for a phone held sideways (smaller = more zoomed in)
   supportDepth: 34,      // how much solid building must sit under a gorilla to hold him up
   alleyWidth: 38,        // gap beside each gorilla's wall, where he can hang while climbing
   roofStep: 24,          // how far one roof shuffle moves a gorilla
@@ -403,10 +404,14 @@ const BANANAS = {
 /* Jumping (the Move button's long hop to the next rooftop) */
 const JUMP = {
   maxRise: 130,          // the tallest step up a gorilla can jump, in game units
+  wallBonus: 150,        // extra reach when jumping from partway down a wall
   safeGap: 50,           // gaps up to this width are always cleared
   riskPerUnit: 0.004,    // chance of falling short grows by this much per unit of gap beyond safeGap
   maxRisk: 0.6
 };
+
+/* Shrink-nanner: how big the gorilla becomes (1 = normal size) */
+const SHRINK = 0.28;
 
 /* Shake the Tree: what can fall out. weight = how likely, relative to the others.
    A prize can only be won once per round per gorilla. Turn counts are the owner's own turns. */
@@ -862,7 +867,7 @@ function planMove(g, action, mask, W, H, stepRoof, stepClimb, maxClimb) {
 
 /* Work out one jump ('left' or 'right'). Returns { err } or where he lands and how risky the gap is. */
 function planJump(g, dir, buildings, gorillas, mask, W, H) {
-  if (g.wall || g.depth > 0) return { err: 'You are hanging on the wall. Climb up first.' };
+  if ((g.wall || g.depth > 0) && dir !== (g.toward > 0 ? 'right' : 'left')) return { err: 'You hang on the ' + (g.toward > 0 ? 'right' : 'left') + ' wall. Jump that way, or climb up.' };
   const idx = buildings.indexOf(g.b), ni = idx + (dir === 'left' ? -1 : 1);
   if (ni < 0 || ni >= buildings.length) return { err: 'Nothing to jump to that way.' };
   const nb = buildings[ni];
@@ -871,7 +876,7 @@ function planJump(g, dir, buildings, gorillas, mask, W, H) {
   let top = -1;
   for (let y = 0; y < H; y++) { if (solidAt(mask, W, H, x, y)) { top = y; break; } }
   if (top < 0 || top >= H - 2) return { err: 'That building is gone. Nothing to land on.' };
-  if (g.y - top > JUMP.maxRise) return { err: 'Too high to jump up there.' };
+  if (g.y - top > JUMP.maxRise + (g.wall ? JUMP.wallBonus : 0)) return { err: 'Too high to jump up there.' };
   if (!checkSupport(mask, W, H, { x: x, y: top, w: 34, wall: false }, GAME.supportDepth).supported) return { err: 'That roof is too damaged to land on.' };
   const gap = dir === 'right' ? nb.x - (g.b.x + g.b.w) : g.b.x - (nb.x + nb.w);
   const risk = Math.max(0, Math.min(JUMP.maxRisk, (gap - JUMP.safeGap) * JUMP.riskPerUnit));
@@ -1184,7 +1189,7 @@ function drawBanana(c, b) {
 
 function paintCity(G) {
   const c = G.cityCtx, lv = G.level;
-  c.setTransform(2, 0, 0, 2, 0, 0);
+  c.setTransform(G.cs, 0, 0, G.cs, 0, 0);
   c.globalCompositeOperation = 'source-over';
   c.clearRect(0, 0, G.W, G.H);
   for (const b of G.buildings) {
@@ -1226,7 +1231,7 @@ function paintCity(G) {
 
 function applyCircles(G, circles) {
   const c = G.cityCtx;
-  c.setTransform(2, 0, 0, 2, 0, 0);
+  c.setTransform(G.cs, 0, 0, G.cs, 0, 0);
   c.globalCompositeOperation = 'destination-out';
   c.fillStyle = '#000';
   for (const k of circles) { c.beginPath(); c.arc(k.x, k.y, k.r, 0, 7); c.fill(); }
@@ -1344,10 +1349,11 @@ const G = {
 };
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-  G.view = { w: w, h: h, dpr: dpr, scale: h / GAME.viewHeight };
+  const sideways = w > h && h <= 520;                       // a phone held sideways: zoom in so everything is bigger
+  G.view = { w: w, h: h, dpr: dpr, scale: h / (sideways ? GAME.viewHeightLandscape : GAME.viewHeight) };
 }
 
 function makePlayer(i, cfg) {
@@ -1384,8 +1390,9 @@ function startRound(menuMode) {
   const nb = G.buildings.length;
   G.buildings.forEach(function (b, i) { b.decor = !(i <= 1 || i >= nb - 2 || i % 3 === 1 || spots.indexOf(i) >= 0); });   // rooftop clutter, kept off the gorillas' roofs and the flag roofs
   G.mask = makeMask(G.W, G.H, G.buildings);
-  G.cityCanvas = document.createElement('canvas');
-  G.cityCanvas.width = G.W * 2; G.cityCanvas.height = G.H * 2;
+  G.cs = Math.min(2, 5000 / G.W);                           // picture sharpness; a little less for very long cities so phones do not run out of memory
+  if (!G.cityCanvas) G.cityCanvas = document.createElement('canvas');   // one picture, reused every round
+  G.cityCanvas.width = Math.round(G.W * G.cs); G.cityCanvas.height = Math.round(G.H * G.cs);
   G.cityCtx = G.cityCanvas.getContext('2d');
   paintCity(G);
   G.stars = []; G.far = [];
@@ -1418,7 +1425,7 @@ function startRound(menuMode) {
   G.fresh = true;
   G.zoom = 1;
   const g = G.gorillas[G.turn], vw = G.view.w / G.view.scale;
-  G.cam.x = clampCamX(g.x - vw / 2); G.cam.y = G.H - GAME.viewHeight;
+  G.cam.x = clampCamX(g.x - vw / 2); G.cam.y = G.H - G.view.h / G.view.scale;
   if (menuMode) { G.state = 'menu'; } else { beginTurn(); }
 }
 
@@ -1515,7 +1522,7 @@ function doShake() {
   } else if (pz.id === 'plantain') p.uses.plantain += 1;
   else if (pz.id === 'umbrella') p.fx.umbrella = pz.turns + 1;
   else if (pz.id === 'scope') p.fx.scope = pz.turns + 1;
-  else if (pz.id === 'shrink') { p.fx.shrink = true; g.size = p.size * 0.55; g.w = 34 * g.size; g.h = 68 * g.size; }
+  else if (pz.id === 'shrink') { p.fx.shrink = true; g.size = p.size * SHRINK; g.w = 34 * g.size; g.h = 68 * g.size; }
   syncFx();
   g.pose = 'cheer'; g.facing = aimFacing(g, p.aim.dir);
   burst(g.x, g.y - g.h - 24, 30, ['#5fe3a1', '#2fa36a', '#ffd23f'], 190);
@@ -1721,14 +1728,15 @@ function update(dt) {
   if (G.state === 'flying' && G.bananas.length) {
     let top = 1e9;
     for (const b of G.bananas) top = Math.min(top, b.y);
-    zt = Math.max(0.55, Math.min(1, GAME.viewHeight / (G.H - top + 110 + G.uiPx / G.view.scale)));
+    zt = Math.max(0.4, Math.min(1, (G.view.h / G.view.scale) / (G.H - top + 110 + G.uiPx / G.view.scale)));
   }
   const tp = G.players[G.turn];
   const scoped = G.state !== 'menu' && tp && tp.fx && tp.fx.scope > 0 && (!ONLINE.on || G.turn === ONLINE.me) &&
     (G.state === 'aim' || G.state === 'moving' || G.state === 'flying' || G.state === 'settle');
-  if (scoped) zt = Math.min(zt, Math.max(0.2, Math.min(1, G.view.w / (G.view.scale * (G.W + 120)))));   // nanner scope: the whole city
+  const freeW = G.view.w - (G.toolsPx || 0);                // screen width not hidden behind the music and effects buttons
+  if (scoped) zt = Math.min(zt, Math.max(0.2, Math.min(1, freeW / (G.view.scale * (G.W + 120)))));   // nanner scope: the whole city
   G.zoom += (zt - G.zoom) * Math.min(1, dt * (zt < G.zoom ? 5 : 2.5));
-  const vw = G.view.w / (G.view.scale * G.zoom), vh = GAME.viewHeight / G.zoom;
+  const vw = G.view.w / (G.view.scale * G.zoom), vh = (G.view.h / G.view.scale) / G.zoom;
   const reserve = G.state === 'menu' ? 0 : G.uiPx / (G.view.scale * G.zoom);   // keep the action clear of the control panel
   let tx = G.cam.x, ty = G.H - vh + reserve, rate = 4;
   const g = G.gorillas[G.turn];
@@ -1748,7 +1756,7 @@ function update(dt) {
         tx = g.x - vw / 2;                                  // centre on the player whose turn it is
     ty = Math.min(ty, g.y - 55 - (vh - reserve) / 2);   // and keep their roof in view even on very tall buildings
   }
-  if (scoped) { tx = G.W / 2 - vw / 2; if (G.state === 'aim') ty = G.H - vh + reserve; }
+  if (scoped) { tx = G.W / 2 - (freeW / (G.view.scale * G.zoom)) / 2; if (G.state === 'aim') ty = G.H - vh + reserve; }
   G.cam.x += (clampCamX(tx) - G.cam.x) * Math.min(1, dt * rate);
   G.cam.y += (ty - G.cam.y) * Math.min(1, dt * (rate + 2));
 }
@@ -2199,8 +2207,19 @@ let lastT = performance.now(), crashed = false, frameNo = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
-  if (frameNo++ % 10 === 0) G.uiPx = $('hud').hidden ? 0 : ($('controls').offsetHeight || 0) + 14;
-  try { if (ONLINE.on) onlinePump(); update(dt); render(); } catch (err) { if (!crashed) { crashed = true; console.error(err); } }
+  if (frameNo++ % 10 === 0) {
+    G.uiPx = $('hud').hidden ? 0 : ($('controls').offsetHeight || 0) + 14;
+    let tp = 0;                                                       // sideways phones keep the music buttons in a column on the right
+    if (!$('hud').hidden) { const r = $('tools').getBoundingClientRect(); if (r.width > 0 && r.left > G.view.w * 0.5 && r.height > 80) tp = G.view.w - r.left + 8; }
+    G.toolsPx = tp;
+  }
+  try { if (ONLINE.on) onlinePump(); update(dt); render(); } catch (err) {
+    if (!crashed) {
+      crashed = true; console.error(err);
+      const n = $('netNote'); n.hidden = false; n.textContent = 'Something went wrong. If the game looks stuck, reload the page. An online game can be rejoined.';
+      setTimeout(function () { n.hidden = true; }, 9000);
+    }
+  }
   requestAnimationFrame(frame);
 }
 
