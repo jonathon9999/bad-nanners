@@ -211,6 +211,7 @@ details[open] summary { margin-bottom: 8px; }
       <button class="mini" id="btnTrack" type="button">Track</button>
       <button class="mini" id="btnMusic" type="button">Music: on</button>
       <button class="mini" id="btnSfx" type="button">Effects: on</button>
+      <button class="mini" id="btnRoom" type="button" hidden>Room</button>
       <button class="mini" id="btnMenu" type="button">Menu</button>
       <div id="trackMenu" hidden role="group" aria-label="Music track"></div>
     </div>
@@ -305,6 +306,7 @@ details[open] summary { margin-bottom: 8px; }
     <p id="lbStatus"></p>
     <div id="lbList"></div>
     <div class="row end">
+      <button class="primary" id="btnLbBack" type="button" hidden>Back to the game</button>
       <button class="primary" id="btnLbGo" type="button" hidden>Start now</button>
       <button id="btnLbLeave" type="button">Leave room</button>
     </div>
@@ -1588,6 +1590,12 @@ function drawSpriteGorilla(c, g, pose, t) {
   else if (mv && (mv.jump || mv.wall)) { if (single) { sy = 1.08; sx = 0.94; } }
   else if (mv) dy = -Math.abs(Math.sin(t * 14)) * 3;
   else sy = 1 + Math.sin(t * 2.4 + g.x) * 0.014;            // slow breathing
+  if (set.base == null && g.fur) {                          // pictures that cannot be recoloured get a glowing ring in the player's colour
+    c.save(); c.translate(g.x, g.y + 1);
+    c.shadowColor = g.fur; c.shadowBlur = 10; c.strokeStyle = g.fur; c.lineWidth = 3; c.globalAlpha = 0.9;
+    c.beginPath(); c.ellipse(0, 0, Math.max(14, (g.w || 34) * 0.78), 6, 0, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = 0.25; c.fillStyle = g.fur; c.fill(); c.restore();
+  }
   c.save();
   c.translate(g.x + dx * g.facing, g.y + dy + 2); c.rotate(rot * g.facing); c.scale(g.facing * sx, 1);
   c.imageSmoothingEnabled = true;
@@ -3038,7 +3046,7 @@ async function openRoom(id) {
   Object.assign(NET, {
     room: room, id: id, log: [], applied: 0, ep: 0, started: false, ck: '', pl: null, cfg: null, others: [], people: [], live: [],
     hostPeer: null, isHost: false, claimed: false, hs: null, seen: {}, vac: {}, goSeen: {}, goN: 0, hb: 0, noHost: 0, rebuilds: 0, catchUp: false,
-    leftMid: -1, lostT: 0, turnT: 0, roverT: 0, warn: '', lastN: 0, finMid: -1, peerId: null
+    leftMid: -1, openedSet: false, lostT: 0, turnT: 0, roverT: 0, warn: '', lastN: 0, finMid: -1, peerId: null
   });
   NET.unsubs = [room.onPeers(refreshNet), room.onConnection(syncNote)];
 }
@@ -3048,7 +3056,7 @@ function setHash(id) { try { if (id) location.hash = '#' + id; else if (typeof h
 async function onlineLeave(keep) {
   const room = NET.room, unsubs = NET.unsubs || [];
   NET.room = null; NET.started = false; NET.hostPeer = null; NET.others = []; NET.people = []; NET.live = []; NET.hs = null; NET.isHost = false; NET.claimed = false;
-  ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false; NET.log = []; NET.applied = 0;
+  ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false; NET.log = []; NET.applied = 0; $('btnRoom').hidden = true;
   clearInterval(NET.hbT); clearInterval(NET.tickT); NET.hbT = NET.tickT = null; NET.dirKey = '';
   $('netNote').hidden = true;
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
@@ -3304,7 +3312,7 @@ function startOnline(cfg, pl, me, mid) {
   NET.catchUp = NET.others.some(function (p) { return (p.presence.ep | 0) === mid && p.presence.log; });    // joining a match that has already begun: replay it
   NET.cfg = cfg; NET.pl = pl; NET.started = true; NET.log = []; NET.applied = 0; NET.rebuilds = 0; NET.lostT = 0; NET.finMid = -1; NET.vac = {};
   NET.turnT = Date.now(); NET.roverT = 0; NET.warn = '';
-  showOnly('game');
+  showOnly('game'); $('btnRoom').hidden = false;
   audioReady(); musicStart();
   startRound(false);
   pub({ ep: mid, log: '', fin: null, aim: null, ck: null });
@@ -3317,7 +3325,7 @@ function onlineToRoom(msg) {
   NET.leftMid = NET.ep; NET.started = false; ONLINE.on = false; ONLINE.applying = false; ONLINE.allHere = true;
   NET.log = []; NET.applied = 0; NET.catchUp = false; NET.warn = '';
   pub({ ep: 0, log: '', fin: null, aim: null, ck: null });
-  $('netNote').hidden = true; $('over').hidden = true;
+  $('netNote').hidden = true; $('over').hidden = true; $('btnRoom').hidden = true;
   G.pullOnly = false; G.levelKey = levelChoice(); G.diffKey = S.diff; G.players = currentPlayers();
   startRound(true);
   showOnly('lobby');
@@ -3357,14 +3365,17 @@ function lobbyUpdate() {
   $('btnHost').hidden = !host || NET.isHost;
   // what is going on
   let text = '', can = false;
+  $('btnLbBack').hidden = !NET.started;
+  if (NET.isHost && !NET.openedSet) { NET.openedSet = true; $('lbSet').open = true; }
   if (!host) text = 'Setting up the room…';
+  else if (playing && NET.started) text = 'Your match is still going. Anything you change here is used for the next match.';
   else if (playing) {
     const names = (plDecode(hs.pl) || []).map(function (p) { return p.name; }).join(', ');
     text = 'A match is in progress (' + names + '). You will be dealt into the next one, or into a seat that opens up.';
   } else if (live.length < 2) text = 'Waiting for a friend. Tell them to open this page and join ' + roomLabel(NET.id) + '.';
   else {
     const left = Math.max(0, Math.ceil(((hs && hs.cdAt) - nowMs()) / 1000));
-    text = (hs && hs.cdAt ? 'The next match starts in ' + left + ' seconds. ' : '') + 'Pick your gorilla below. Anyone can tap Start now.';
+    text = (hs && hs.cdAt ? 'All set! The next match starts in ' + left + ' seconds. ' : '') + (NET.isHost ? 'Changing a setting gives you a fresh countdown. ' : '') + 'Anyone can tap Start now.';
     can = true;
   }
   $('lbStatus').textContent = text;
@@ -3521,6 +3532,8 @@ $('btnLbGo').onclick = function () {
   if (NET.isHost) NET.startNow = true; else { NET.goN = (NET.goN | 0) + 1; pub({ go: NET.goN }); }
   refreshNet();
 };
+$('btnRoom').onclick = function () { if (!NET.started) return; $('lobby').hidden = false; lobbyUpdate(); };
+$('btnLbBack').onclick = function () { $('lobby').hidden = true; };
 $('btnHost').onclick = function () {
   let maxHo = 0;
   (NET.people || []).forEach(function (p) { maxHo = Math.max(maxHo, p.presence.ho | 0); });
@@ -3538,7 +3551,9 @@ $('gCol').oninput = function () { NET.prof.fur = $('gCol').value; guestPreview()
 $('gGor').onchange = function () { NET.prof.gorilla = $('gGor').value; NET.prof.fur = GORILLAS[NET.prof.gorilla].fur; $('gCol').value = NET.prof.fur; guestPreview(); profChanged(); };
 function hostSetFromUI() {
   if (!NET.isHost) return;
-  setHost({ set: [$('lbCity').value, $('lbDiff').value, $('lbFirst').value, $('lbPull').checked ? 1 : 0].join('|') });
+  const patch = { set: [$('lbCity').value, $('lbDiff').value, $('lbFirst').value, $('lbPull').checked ? 1 : 0].join('|') };
+  if (NET.hs.st !== 'play' && NET.hs.cdAt) patch.cdAt = nowMs() + ROOM_T.countdown * 1000;     // editing never races the countdown
+  setHost(patch);
   lobbyUpdate();
 }
 ['lbCity', 'lbDiff', 'lbFirst'].forEach(function (id) { $(id).onchange = hostSetFromUI; });
