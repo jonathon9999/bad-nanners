@@ -46,6 +46,9 @@ button { cursor: pointer; }
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
+#topbar.many { flex-wrap: wrap; }
+#topbar.many .chip { flex: 1 1 45%; max-width: none; padding: 4px 10px; box-sizing: border-box; }
+#topbar.many #wind { order: 9; flex: 1 1 100%; flex-direction: row; gap: 10px; justify-content: center; padding: 2px 10px; }
 #topbar { display: flex; align-items: stretch; justify-content: space-between; gap: 8px; }
 .chip {
   flex: 1 1 0; min-width: 0; max-width: 220px;
@@ -155,6 +158,7 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
   #tools { flex-direction: column; flex-wrap: nowrap; margin-top: 0; gap: 4px; }
   #trackMenu { top: 0; right: 100%; margin: 0 6px 0 0; }
   .chip { padding: 3px 10px; border-radius: 10px; }
+  #topbar.many .chip { flex: 1 1 18%; }
   .chip .sc { font-size: 17px; }
   #wind { padding: 3px 10px; }
   #controls { max-width: none; flex-wrap: nowrap; justify-content: flex-start; gap: 6px 10px; padding: 6px 8px; border-radius: 12px; }
@@ -226,10 +230,11 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
   <div class="card">
     <div>
       <h1>Bad Nanners!</h1>
-      <p>Pass the phone back and forth, or play a friend on their own phone. Drag anywhere on the screen to aim, then press Throw.</p>
+      <p>Pass the phone around (2 to 4 players), or play friends on their own phones. Drag anywhere on the screen to aim, then press Throw.</p>
     </div>
     <div class="sec"><span class="lbl">City</span><select id="level" aria-label="City"></select></div>
     <div class="sec"><span class="lbl">Difficulty</span><div class="seg" id="diffSeg"></div><p class="hint" id="diffHint"></p></div>
+    <div class="sec"><span class="lbl">Players</span><div class="seg" id="countSeg"></div></div>
     <div class="players" id="players"></div>
     <div class="sec"><span class="lbl">Music track</span><select id="optTrack" aria-label="Music track"></select></div>
     <div class="sec"><span class="lbl">First to</span><div class="seg" id="firstSeg"></div></div>
@@ -240,7 +245,7 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
     </div>
     <button class="primary" id="btnStart" type="button">Start (one phone)</button>
     <div class="sec">
-      <button class="side" id="btnOnline" type="button">Play a friend online</button>
+      <button class="side" id="btnOnline" type="button">Play friends online</button>
       <button class="side" id="btnResume" type="button" hidden>Rejoin my online game</button>
       <p class="hint" id="onlineMsg"></p>
     </div>
@@ -256,7 +261,7 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
     <div id="lbLinkBox" hidden>
       <span class="lbl">Invite link</span>
       <div class="row end"><input type="text" id="lbLink" readonly aria-label="Invite link"><button id="btnCopy" type="button">Copy</button></div>
-      <p class="tiny">Send this link to your friend. Keep this page open until they join.</p>
+      <p class="tiny">Send this link to up to three friends. Keep this page open until they join.</p>
     </div>
     <div id="lbGuest" hidden>
       <div class="pbox">
@@ -386,11 +391,13 @@ const GORILLAS = {
    shots = one entry per banana thrown, angle is the extra tilt in degrees. */
 const BANANAS = {
   classic: { label: 'Classic', uses: Infinity, crater: 24, size: 0.5, gravityScale: 1.0,  color: '#ffd23f', shots: [{ angle: 0 }] },
-  mega:    { label: 'Big Nana',     uses: 3,    crater: 54, size: 1.1, gravityScale: 1.12, color: '#ffb000', shots: [{ angle: 0 }] },
+  mega:    { label: 'Big Mike',     uses: 3,    crater: 54, size: 1.1, gravityScale: 1.12, color: '#ffb000', shots: [{ angle: 0 }] },
   /* Banana Split: flies as one banana, then splits into three at the top of its arc.
      spread = how fast the side pieces drift apart (game units per second). */
   triple:  { label: 'Banana Split', uses: 3,    crater: 20, size: 0.8, gravityScale: 1.0,  color: '#ffe680', shots: [{ angle: 0 }],
-             split: { pieces: [-1, 0, 1], spread: 85, size: 0.6 } }
+             split: { pieces: [-1, 0, 1], spread: 85, size: 0.6 } },
+  /* The Plantain: only ever won from the tree (you start with none). Three times the size and blast of a Big Mike. */
+  plantain: { label: 'Plantain',     uses: 0,    crater: 162, size: 3.3, gravityScale: 1.15, color: '#b5c94a', shots: [{ angle: 0 }] }
 };
 
 /* Jumping (the Move button's long hop to the next rooftop) */
@@ -404,10 +411,11 @@ const JUMP = {
 /* Shake the Tree: what can fall out. weight = how likely, relative to the others.
    A prize can only be won once per round per gorilla. Turn counts are the owner's own turns. */
 const PRIZES = [
-  { id: 'bonus',    weight: 30, short: 'Bonus nanners!', text: '+2 Big Nana or +2 Banana Split' },
+  { id: 'bonus',    weight: 30, short: 'Bonus nanners!', text: '+2 Big Mike or +2 Banana Split' },
   { id: 'umbrella', weight: 20, turns: 3, short: 'Umbrella!', text: 'Hits bounce off you for 3 turns' },
   { id: 'shrink',   weight: 15, short: 'Shrink-nanner!', text: 'You are tiny for the rest of the round' },
   { id: 'scope',    weight: 15, turns: 3, short: 'Nanner scope!', text: 'You see the whole city for 3 turns' },
+  { id: 'plantain', weight: 8,  short: 'A PLANTAIN!', text: 'One giant banana. Huge crater' },
   { id: 'dud',      weight: 20, short: 'Just leaves...', text: 'And a very annoyed sloth' }
 ];
 
@@ -694,7 +702,13 @@ function buildCity(level, targetWidth, rnd, H, alley) {
 }
 
 /* Which two buildings the gorillas stand on. */
-function gorillaSpots(n) { return [0, n - 1]; }
+function gorillaSpots(n, count) {
+  count = count || 2;
+  if (count <= 2) return [0, n - 1];
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(Math.round(i * (n - 1) / (count - 1)));    // spread along the whole skyline
+  return out;
+}
 
 /* Gorillas perch near the roof edge that faces the other gorilla, so a hit on that wall can undermine him. */
 function perchX(b, toward) { return Math.round(b.x + b.w / 2 + toward * Math.max(0, b.w / 2 - 20)); }
@@ -1311,10 +1325,10 @@ function drawUmbrella(c, g, t) {
 }
 /* ---------------- game state ---------------- */
 /* Online play: both phones run the same game and replay each other's throws. See 07-online.js. */
-const ONLINE = { on: false, me: 0, applying: false, seed: 0, matchNo: 0, oppHere: true };
-const NET = { room: null, role: null, id: null, log: [], applied: 0, ep: 0, started: false, ck: '', peerId: null, acc: null, cfg: null, prof: null, catchUp: false };
+const ONLINE = { on: false, me: 0, applying: false, seed: 0, matchNo: 0, allHere: true, missing: [] };
+const NET = { room: null, role: null, id: null, log: [], applied: 0, ep: 0, started: false, ck: '', peerId: null, acc: null, cfg: null, prof: null, catchUp: false, slots: [], pl: null, hostPeer: null, others: [], accSent: '', vac: {} };
 /* Is it this phone's turn to act? Always true when playing on one phone. */
-function mine() { return !ONLINE.on || ONLINE.applying || (G.turn === ONLINE.me && ONLINE.oppHere && NET.applied === NET.log.length); }
+function mine() { return !ONLINE.on || ONLINE.applying || (G.turn === ONLINE.me && ONLINE.allHere && NET.applied === NET.log.length); }
 /* Gorillas ease onto their perch after a hit; snap them so both phones start every shot from the same spot. */
 function snapGorillas() { for (const g of G.gorillas) if (!g.falling && g.settleY != null) g.y = g.settleY; }
 
@@ -1345,7 +1359,7 @@ function makePlayer(i, cfg) {
 }
 
 function resetPlayerRound(p, i) {
-  p.aim = { dir: i === 0 ? 1 : -1, elev: 45, power: 60 };
+  p.aim = { dir: G.gorillas[i] ? G.gorillas[i].toward : (i === 0 ? 1 : -1), elev: 45, power: 60 };
   p.uses = {};
   for (const k in BANANAS) p.uses[k] = BANANAS[k].uses;
   p.bananaKey = 'classic';
@@ -1362,12 +1376,13 @@ function startRound(menuMode) {
   const seed = GAME.seed != null ? GAME.seed + G.round : (ONLINE.on ? ONLINE.seed + ONLINE.matchNo * 104729 + G.round * 7919 : Math.floor(Math.random() * 1e9));
   const rnd = mulberry32(seed);
   G.rnd = rnd;
-  const city = buildCity(lvl, diff.distance + 170, rnd, GAME.worldHeight, GAME.alleyWidth);
-  const spots = gorillaSpots(city.buildings.length);
+  const count = G.players.length;
+  const city = buildCity(lvl, (diff.distance + 170) * (1 + 0.3 * (count - 2)), rnd, GAME.worldHeight, GAME.alleyWidth);   // more gorillas, a longer city
+  const spots = gorillaSpots(city.buildings.length, count);
   if (!lvl.buildings) flattenAround(city.buildings, spots, 110);
   G.level = lvl; G.H = GAME.worldHeight; G.W = Math.ceil(city.width); G.buildings = city.buildings;
   const nb = G.buildings.length;
-  G.buildings.forEach(function (b, i) { b.decor = !(i <= 1 || i >= nb - 2 || i % 3 === 1); });   // rooftop clutter, kept off the gorillas' roofs and the flag roofs
+  G.buildings.forEach(function (b, i) { b.decor = !(i <= 1 || i >= nb - 2 || i % 3 === 1 || spots.indexOf(i) >= 0); });   // rooftop clutter, kept off the gorillas' roofs and the flag roofs
   G.mask = makeMask(G.W, G.H, G.buildings);
   G.cityCanvas = document.createElement('canvas');
   G.cityCanvas.width = G.W * 2; G.cityCanvas.height = G.H * 2;
@@ -1376,9 +1391,9 @@ function startRound(menuMode) {
   G.stars = []; G.far = [];
   for (let i = 0; i < 70; i++) G.stars.push({ x: rnd(), y: rnd(), r: 1 + rnd() * 1.6 });
   for (let x = -200; x < G.W + 1800;) { const w = rint(rnd, 40, 90); G.far.push({ x: x, w: w, h: rint(rnd, 60, 280) }); x += w; }
-  G.gorillas = [0, 1].map(function (i) {
-    const b = G.buildings[spots[i]], p = G.players[i];
-    const toward = i === 0 ? 1 : -1;
+  G.gorillas = G.players.map(function (pl, i) {
+    const b = G.buildings[spots[i]], p = pl;
+    const toward = i < count / 2 ? 1 : -1;       // the left half face right, the right half face left
     return {
       idx: i, b: b, toward: toward, x: perchX(b, toward), y: G.H - b.h, roofY: G.H - b.h, wallX: toward > 0 ? b.x + b.w : b.x,
       slot: 0, depth: 0, wall: false, maxSlot: Math.max(0, Math.floor((b.w - 40) / GAME.roofStep)), move: null,
@@ -1391,7 +1406,7 @@ function startRound(menuMode) {
   G.flags = [];
   const flagColors = ['#ff5c6c', '#ffd23f', '#5fe3a1', '#6cc4ff', '#ff9a3c'];
   G.buildings.forEach(function (b, i) {
-    if (i < 2 || i > G.buildings.length - 3 || i % 3 !== 1) return;   // keep flags off the gorillas' own roofs and neighbours
+    if (i < 2 || i > G.buildings.length - 3 || i % 3 !== 1 || spots.indexOf(i) >= 0) return;   // keep flags off the gorillas' own roofs and neighbours
     G.flags.push({ x: Math.round(b.x + b.w * 0.5), y: G.H - b.h, color: flagColors[i % flagColors.length], gone: false });
   });
   G.windFx = [];
@@ -1399,7 +1414,7 @@ function startRound(menuMode) {
   G.bananas = []; G.particles = []; G.flashes = []; G.result = null; G.lastImpact = null; G.shake = 0;
   G.players.forEach(resetPlayerRound);
   syncFx();
-  G.turn = G.round % 2;
+  G.turn = G.round % count;
   G.fresh = true;
   G.zoom = 1;
   const g = G.gorillas[G.turn], vw = G.view.w / G.view.scale;
@@ -1423,12 +1438,19 @@ function beginTurn() {
   if (ONLINE.on) onlineTurnStart();
 }
 
+function aliveCount() { return G.gorillas.filter(function (g) { return !g.fell; }).length; }
+/* The next gorilla still standing, going round the table. */
+function nextAlive(from) {
+  const n = G.gorillas.length;
+  for (let k = 1; k <= n; k++) { const j = (from + k) % n; if (!G.gorillas[j].fell) return j; }
+  return from;
+}
 function nextTurn() {
   const q = G.players[G.turn].fx;                       // the turn that just ended counts against umbrella and scope
   if (q.umbrella > 0) q.umbrella--;
   if (q.scope > 0) q.scope--;
   syncFx();
-  G.turn = 1 - G.turn; beginTurn();
+  G.turn = nextAlive(G.turn); beginTurn();
 }
 
 /* A hanging gorilla keeps facing the wall; a roof gorilla faces the way he is aiming. */
@@ -1490,7 +1512,8 @@ function doShake() {
     const key = G.rnd() < 0.5 ? 'mega' : 'triple';
     p.uses[key] += 2;
     sub = '+2 ' + BANANAS[key].label;
-  } else if (pz.id === 'umbrella') p.fx.umbrella = pz.turns + 1;
+  } else if (pz.id === 'plantain') p.uses.plantain += 1;
+  else if (pz.id === 'umbrella') p.fx.umbrella = pz.turns + 1;
   else if (pz.id === 'scope') p.fx.scope = pz.turns + 1;
   else if (pz.id === 'shrink') { p.fx.shrink = true; g.size = p.size * 0.55; g.w = 34 * g.size; g.h = 68 * g.size; }
   syncFx();
@@ -1598,7 +1621,7 @@ function stepFlight(dt) {
 function evaluateSupports() {
   let any = false;
   for (const g of G.gorillas) {
-    if (g.falling) { any = true; continue; }
+    if (g.falling) { if (g.y <= G.H + 160) any = true; continue; }     // one still tumbling counts; one long gone does not
     const s = checkSupport(G.mask, G.W, G.H, g, GAME.supportDepth);
     if (!s.supported) {
       g.falling = true; g.fell = true; g.vx = 0; g.vy = 0; g.spin = (Math.random() < 0.5 ? -1 : 1) * 2.5;
@@ -1612,9 +1635,8 @@ function evaluateSupports() {
 }
 
 function finishRound() {
-  const l0 = G.gorillas[0].fell, l1 = G.gorillas[1].fell;
-  let winner = -1;
-  if (l0 && !l1) winner = 1; else if (l1 && !l0) winner = 0;
+  const alive = G.gorillas.filter(function (g) { return !g.fell; });
+  const winner = alive.length === 1 ? alive[0].idx : -1;      // last gorilla standing; nobody left is a draw
   G.result = { winner: winner };
   if (winner >= 0) { G.scores[winner]++; G.gorillas[winner].pose = 'cheer'; playSound('win'); }
   G.state = 'celebrate'; G.timer = 1.7;
@@ -1688,7 +1710,7 @@ function update(dt) {
   } else if (G.state === 'falling') {
     G.timer -= dt;
     const done = G.gorillas.every(function (g) { return !g.falling || g.y > G.H + 160; });
-    if (done || G.timer <= 0) finishRound();
+    if (done || G.timer <= 0) { if (aliveCount() <= 1) finishRound(); else nextTurn(); }     // others are still up there: play on
   } else if (G.state === 'celebrate') {
     G.timer -= dt;
     if (G.timer <= 0) { G.state = 'roundover'; showRoundOver(); }
@@ -1819,10 +1841,12 @@ const $ = function (id) { return document.getElementById(id); };
 const STORE_KEY = 'rooftopBananas.setup.v1';
 
 const S = {
-  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, music: true, sfx: true, track: 'chestbeat',
+  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, music: true, sfx: true, track: 'chestbeat', count: 2,
   players: [
     { name: 'Player 1', gorilla: 'silverback', fur: GORILLAS.silverback.fur },
-    { name: 'Player 2', gorilla: 'goldie', fur: GORILLAS.goldie.fur }
+    { name: 'Player 2', gorilla: 'goldie', fur: GORILLAS.goldie.fur },
+    { name: 'Player 3', gorilla: 'snowy', fur: GORILLAS.snowy.fur },
+    { name: 'Player 4', gorilla: 'jungle', fur: GORILLAS.jungle.fur }
   ]
 };
 
@@ -1834,6 +1858,7 @@ function loadSetup() {
     if (DIFFICULTIES[saved.diff]) S.diff = saved.diff;
     if (GAME.firstToOptions.indexOf(saved.firstTo) >= 0) S.firstTo = saved.firstTo;
     if (TRACKS.some(function (t) { return t.id === saved.track; })) S.track = saved.track;
+    if (saved.count >= 2 && saved.count <= 4) S.count = saved.count | 0;
     S.release = !!saved.release; S.music = saved.music !== false; S.sfx = saved.sfx !== false;
     (saved.players || []).forEach(function (p, i) {
       if (S.players[i] && GORILLAS[p.gorilla]) S.players[i] = { name: String(p.name || '').slice(0, 14), gorilla: p.gorilla, fur: /^#[0-9a-f]{6}$/i.test(p.fur) ? p.fur : GORILLAS[p.gorilla].fur };
@@ -1868,8 +1893,16 @@ function buildSetup() {
   });
   setPressed(fseg, S.firstTo);
 
+  const cseg = $('countSeg');
+  [2, 3, 4].forEach(function (n) {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.v = n; b.textContent = n + ' players';
+    b.onclick = function () { S.count = n; setPressed(cseg, n); showPlayerBoxes(); playSound('click'); saveSetup(); refreshBackdrop(); };
+    cseg.appendChild(b);
+  });
+  setPressed(cseg, S.count);
+
   const box = $('players');
-  [0, 1].forEach(function (i) {
+  [0, 1, 2, 3].forEach(function (i) {
     const p = S.players[i], d = document.createElement('div');
     d.className = 'pbox';
     d.innerHTML = '<canvas id="pv' + i + '" width="168" height="192" aria-hidden="true"></canvas><div class="fields">' +
@@ -1887,6 +1920,7 @@ function buildSetup() {
     col.oninput = function () { p.fur = col.value; drawPreview(i); saveSetup(); refreshBackdrop(); };
     drawPreview(i);
   });
+  showPlayerBoxes();
 
   $('optRelease').checked = S.release;
   AUDIO.musicMuted = !S.music; AUDIO.sfxMuted = !S.sfx; AUDIO.trackId = S.track; buildTrackLists(); syncAudioButtons();
@@ -1894,6 +1928,9 @@ function buildSetup() {
   $('optMusic').onchange = function () { chooseMusic($('optMusic').checked); };
   $('optSfx').onchange = function () { chooseSfx($('optSfx').checked); };
 }
+
+/* Only as many player boxes as players are shown. */
+function showPlayerBoxes() { document.querySelectorAll('#players .pbox').forEach(function (d, i) { d.hidden = i >= S.count; }); }
 
 function drawPreview(i) {
   const cv = $('pv' + i), c = cv.getContext('2d'), p = S.players[i], def = GORILLAS[p.gorilla];
@@ -1930,7 +1967,7 @@ function syncAudioButtons() {
 function chooseMusic(on) { S.music = on; setMusicMuted(!on); syncAudioButtons(); saveSetup(); }
 function chooseSfx(on) { S.sfx = on; setSfxMuted(!on); syncAudioButtons(); saveSetup(); if (on) playSound('click'); }
 
-function currentPlayers() { return S.players.map(function (cfg, i) { return makePlayer(i, cfg); }); }
+function currentPlayers() { return S.players.slice(0, S.count).map(function (cfg, i) { return makePlayer(i, cfg); }); }
 
 /* The city behind the setup card follows your choices. */
 function refreshBackdrop() {
@@ -1943,7 +1980,7 @@ function startGame() {
   audioReady(); musicStart(); playSound('click');
   saveSetup();
   G.levelKey = S.level; G.diffKey = S.diff; G.players = currentPlayers();
-  G.scores = [0, 0]; G.round = 0; G.firstTo = S.firstTo;
+  G.scores = G.players.map(function () { return 0; }); G.round = 0; G.firstTo = S.firstTo;
   $('setup').hidden = true; $('over').hidden = true; $('hud').hidden = false;
   startRound(false);
 }
@@ -1966,9 +2003,27 @@ function lockControls(on) { $('controls').classList.toggle('locked', on); }
 /* Re-check whether this phone may act right now (opponent left, or not your turn). */
 function refreshLock() { if (G.state === 'aim') { lockControls(!mine()); if (!mine()) setMoveMode(false); } }
 
+/* One scoreboard chip per player; the wind sits in the middle (or under them when there are more than two). */
+function buildChips() {
+  const bar = $('topbar'), wind = $('wind'), n = G.players.length, half = Math.ceil(n / 2);
+  bar.innerHTML = '';
+  const make = function (i) {
+    const c = document.createElement('div'); c.className = 'chip'; c.id = 'chip' + i;
+    c.innerHTML = '<span class="nm" id="nm' + i + '"></span><span class="st" id="st' + i + '"></span><span class="sc" id="sc' + i + '">0</span>';
+    bar.appendChild(c);
+  };
+  for (let i = 0; i < half; i++) make(i);
+  bar.appendChild(wind);
+  for (let i = half; i < n; i++) make(i);
+  bar.classList.toggle('many', n > 2);
+  bar.dataset.n = String(n);
+}
+
 function updateHud() {
-  [0, 1].forEach(function (i) {
+  if ($('topbar').dataset.n !== String(G.players.length)) buildChips();
+  G.players.forEach(function (pl, i) {
     $('nm' + i).textContent = G.players[i].name;
+    $('chip' + i).style.borderLeft = '6px solid ' + G.players[i].fur;
     $('sc' + i).textContent = G.scores[i];
     $('chip' + i).classList.toggle('active', G.state === 'aim' && G.turn === i);
     const fx = G.players[i].fx, st = [];
@@ -1992,7 +2047,9 @@ function refreshAimUI() {
   const row = $('bananaRow');
   row.innerHTML = '';
   Object.keys(BANANAS).forEach(function (k) {
-    const b = document.createElement('button'), left = p.uses[k];
+    const left = p.uses[k];
+    if (BANANAS[k].uses === 0 && left <= 0) return;     // tree-only bananas stay hidden until you win one
+    const b = document.createElement('button');
     b.type = 'button'; b.className = 'bn'; b.disabled = left <= 0;
     b.setAttribute('aria-pressed', String(p.bananaKey === k));
     b.innerHTML = '<b>' + BANANAS[k].label + '</b><span>' + (left === Infinity ? 'unlimited' : left + ' left') + '</span>';
@@ -2029,7 +2086,7 @@ $('btnSetup').onclick = backToSetup;
 /* Next round, or a fresh match after someone wins. Both phones run this the same way. */
 function advanceRound() {
   const r = G.result, won = r && r.winner >= 0 && G.scores[r.winner] >= G.firstTo;
-  if (won) { G.scores = [0, 0]; G.round = 0; if (ONLINE.on) onlineNewMatch(); } else G.round++;
+  if (won) { G.scores = G.players.map(function () { return 0; }); G.round = 0; if (ONLINE.on) onlineNewMatch(); } else G.round++;
   $('over').hidden = true;
   startRound(false);
 }
@@ -2052,10 +2109,10 @@ $('btnMenu').onclick = function () {
 function showRoundOver() {
   const r = G.result, p = G.players, sc = G.scores;
   const matchWin = r.winner >= 0 && sc[r.winner] >= G.firstTo;
-  $('overTitle').textContent = r.winner < 0 ? 'Both gorillas went over. Draw!' : (matchWin ? p[r.winner].name + ' wins the match!' : p[r.winner].name + ' wins the round');
-  $('overSub').textContent = matchWin ? 'Final score ' + sc[0] + ' to ' + sc[1] + '.' : 'First to ' + G.firstTo + (G.firstTo === 1 ? ' win' : ' wins') + ' takes the match.';
+  $('overTitle').textContent = r.winner < 0 ? 'Nobody left standing. Draw!' : (matchWin ? p[r.winner].name + ' wins the match!' : p[r.winner].name + ' wins the round');
+  $('overSub').textContent = matchWin ? 'Final score ' + sc.join(' - ') + '.' : 'First to ' + G.firstTo + (G.firstTo === 1 ? ' win' : ' wins') + ' takes the match.';
   $('overScores').innerHTML = '';
-  [0, 1].forEach(function (i) {
+  p.forEach(function (pl, i) {
     const d = document.createElement('div'), n = document.createElement('span'), b = document.createElement('b');
     n.textContent = p[i].name; b.textContent = sc[i]; d.appendChild(n); d.appendChild(b); $('overScores').appendChild(d);
   });
@@ -2232,21 +2289,21 @@ function firebaseRoomApi() {
     }
   };
 }
-/* ---------------- playing a friend online ----------------
-   How it works: both phones run the whole game. Each phone only sends a short note for every action
+/* ---------------- playing friends online (2 to 4 phones) ----------------
+   How it works: every phone runs the whole game. Each phone only sends a short note for every action
    ("t45.60.+0" = throw at 45 degrees, power 60, aiming right, banana 0; "mr" = move right; "n" = next round).
-   The other phone replays the note and gets exactly the same result, because the city, wind and physics all come
+   The other phones replay the note and get exactly the same result, because the city, wind and physics all come
    from one shared seed. The notes ride on the room's presence (each phone's small shared "profile" object). */
 
 const NET_ID = /^g-[a-z0-9]{6,12}$/;
 const LAST_KEY = 'rooftopBananas.lastGame.v1';
 /* The last online game this phone was in, so leaving by accident (or closing the page) is never final. */
-function saveLast(id, role) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: id, role: role })); } catch (e) {} }
+function saveLast(id, role, prof) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: id, role: role, prof: prof || null })); } catch (e) {} }
 function forgetLast() { try { localStorage.removeItem(LAST_KEY); } catch (e) {} }
 function loadLast() {
   try {
     const o = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
-    if (o && NET_ID.test(o.id) && (o.role === 'host' || o.role === 'guest')) return o;
+    if (o && NET_ID.test(o.id) && (o.role === 'host' || o.role === 'guest')) { if (o.prof) o.prof = cleanProf(o.prof); return o; }
   } catch (e) {}
   return null;
 }
@@ -2284,13 +2341,13 @@ async function openRoom(id, role) {
     if (!api) throw { code: 'room-unavailable' };
   }
   try { room = await api.join(id); } catch (e) { throw { code: 'join-' + ((e && e.code) || 'failed') }; }
-  Object.assign(NET, { room: room, id: id, role: role, log: [], applied: 0, ep: 0, started: false, ck: '', acc: null, cfg: null, opp: null, joined: false, catchUp: false, rebuilds: 0 });
+  Object.assign(NET, { room: room, id: id, role: role, log: [], applied: 0, ep: 0, started: false, ck: '', slots: [], pl: null, hostPeer: null, others: [], accSent: '', vac: {}, cfg: null, joined: false, catchUp: false, rebuilds: 0 });
   NET.unsubs = [room.onPeers(refreshNet), room.onConnection(syncNote)];
 }
 
 async function onlineLeave(keep) {
   const room = NET.room, unsubs = NET.unsubs || [];
-  NET.room = null; NET.started = false; NET.opp = null; ONLINE.on = false; ONLINE.oppHere = true; ONLINE.applying = false;
+  NET.room = null; NET.started = false; NET.hostPeer = null; NET.others = []; NET.slots = []; ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false;
   NET.log = []; NET.applied = 0;
   $('netNote').hidden = true;
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
@@ -2308,26 +2365,27 @@ const NO_ONLINE = 'Online play is only open to people the host has shared this g
 /* ---- host: make a game and an invite link ---- */
 async function hostOnline(resumeId) {
   audioReady();
-  NET.prof = cleanProf(S.players[0]);
+  const last = loadLast();
+  NET.prof = cleanProf(resumeId && last && last.prof ? last.prof : S.players[0]);
   const id = resumeId || netId();
   try {
     await openRoom(id, 'host');
   } catch (e) { netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
-  saveLast(id, 'host');
+  saveLast(id, 'host', NET.prof);
   pub(Object.assign(profPatch(NET.prof), { role: 'host' }));
   showOnly('lobby');
-  $('lbTitle').textContent = resumeId ? 'Rejoining your game' : 'Invite a friend';
-  $('lbText').textContent = resumeId ? 'Looking for your game…' : 'Your friend opens the link on their phone, picks a gorilla and taps Join.';
+  $('lbTitle').textContent = resumeId ? 'Rejoining your game' : 'Invite your friends';
+  $('lbText').textContent = resumeId ? 'Looking for your game…' : 'Up to three friends open the link on their phones, pick a gorilla and tap Join. Start when everyone is in.';
   $('lbLinkBox').hidden = false; $('lbGuest').hidden = true; $('btnLbGo').hidden = true;
   $('lbLink').value = (FIREBASE_URL ? location.href.split('#')[0].split('?')[0] : ONLINE_BASE) + '#' + id;
-  $('lbStatus').textContent = 'Waiting for your friend…';
+  $('lbStatus').textContent = 'Waiting for your friends…';
   refreshNet();
 }
 
 /* ---- guest: arrive from an invite link ---- */
 async function guestOnline(id) {
   const last = loadLast(), auto = !!(last && last.role === 'guest' && last.id === id);
-  NET.prof = cleanProf(S.players[0]);
+  NET.prof = cleanProf(auto && last.prof ? last.prof : S.players[0]);
   showOnly('lobby');
   $('lbTitle').textContent = 'Bad Nanners!';
   $('lbText').textContent = 'Looking for the game…';
@@ -2338,7 +2396,7 @@ async function guestOnline(id) {
   } catch (e) { $('lbText').textContent = ''; netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
   NET.auto = auto;
   setTimeout(function () {
-    if (NET.room && !NET.started && !NET.opp) { $('lbText').textContent = ''; $('lbStatus').textContent = 'Cannot find that game. Ask your friend to keep their game open, then open the link again.'; }
+    if (NET.room && !NET.started && !NET.hostPeer) { $('lbText').textContent = ''; $('lbStatus').textContent = 'Cannot find that game. Ask your friend to keep their game open, then open the link again.'; }
   }, 9000);
   refreshNet();
 }
@@ -2349,51 +2407,101 @@ function guestPreview() {
   drawGorilla(c, { x: 42, y: 90, size: def.size, facing: -1, fur: p.fur, belly: def.belly, face: def.face, accessory: def.accessory, rot: 0 }, 'idle', 0);
 }
 
-/* ---- who is on the other phone ---- */
-function oppPeer(ps) {
-  const others = ps.filter(function (p) { return !p.isMe && p.presence; });
-  if (NET.role === 'host') {
-    const guests = others.filter(function (p) { return p.presence.role === 'guest'; });
-    if (!guests.some(function (p) { return p.peer === NET.acc; })) {
-      const next = guests.length ? guests[0].peer : null;
-      if (next !== NET.acc) { NET.acc = next; pub({ acc: next }); }
-    }
-    return guests.find(function (p) { return p.peer === NET.acc; }) || null;
+/* ---- seats: player 0 is the host; guests take seats 1 to 3 in the order they joined ---- */
+function plEncode(pl) { return JSON.stringify(pl.map(function (p) { return [p.name, p.gorilla, p.fur]; })); }
+function plDecode(str) {
+  try {
+    const a = JSON.parse(str);
+    if (!Array.isArray(a) || a.length < 2 || a.length > 4) return null;
+    return a.map(function (r) { return cleanProf({ name: r[0], gorilla: r[1], fur: r[2] }); });
+  } catch (e) { return null; }
+}
+function accList(hp) { return hp && hp.acc ? String(hp.acc).split(',') : []; }
+
+/* The peer sitting in a seat right now, or null. */
+function seatPeer(i) {
+  if (i === 0) return NET.role === 'host' ? NET.peerId : (NET.hostPeer ? NET.hostPeer.peer : null);
+  if (NET.role === 'host') return NET.slots[i - 1] || null;
+  const id = accList(NET.hostPeer && NET.hostPeer.presence)[i - 1];
+  return id && id !== '-' ? id : null;
+}
+
+/* The host keeps the seating plan: who sits where, and who takes a seat that has been left empty. */
+function hostManage(others) {
+  const guests = others.filter(function (p) { return p.presence.role === 'guest'; });
+  const here = function (id) { return guests.some(function (g) { return g.peer === id; }); };
+  if (!NET.started) {
+    NET.slots = NET.slots.filter(here);
+    guests.forEach(function (g) { if (NET.slots.length < 3 && NET.slots.indexOf(g.peer) < 0) NET.slots.push(g.peer); });
+  } else {
+    const now = Date.now();
+    NET.slots = NET.slots.map(function (id, i) {
+      if (id && here(id)) return id;
+      if (!NET.vac[i]) NET.vac[i] = now;                 // note when the seat was left empty
+      return null;
+    });
+    guests.forEach(function (g) {
+      if (NET.slots.indexOf(g.peer) >= 0) return;
+      const nm = profPresence(g.presence).name;
+      let v = -1;
+      for (let i = 0; i < NET.slots.length; i++) if (!NET.slots[i] && NET.pl && NET.pl[i + 1] && NET.pl[i + 1].name === nm) { v = i; break; }   // the same name gets its own seat back
+      if (v < 0) for (let i = 0; i < NET.slots.length; i++) if (!NET.slots[i] && now - NET.vac[i] > 25000) { v = i; break; }                      // a stranger only after a wait
+      if (v >= 0) { NET.slots[v] = g.peer; delete NET.vac[v]; }
+    });
+    NET.slots.forEach(function (id, i) { if (id) delete NET.vac[i]; });
   }
-  return others.find(function (p) { return p.presence.role === 'host'; }) || null;
+  const acc = NET.slots.map(function (id) { return id || '-'; }).join(',');
+  if (acc !== NET.accSent) { NET.accSent = acc; pub({ acc: acc }); }
 }
 
 function refreshNet() {
   if (!NET.room) return;
   const ps = NET.room.peers(), me = ps.find(function (p) { return p.isMe && p.sameTab; });
   if (me) NET.peerId = me.peer;
-  const opp = oppPeer(ps);
-  NET.opp = opp;
-  if (!NET.started) { lobbyUpdate(opp); return; }
-  const op = opp ? opp.presence : null;
-  ONLINE.oppHere = !!opp && (NET.role === 'host' || op.acc === NET.peerId);
-  if (ONLINE.oppHere) { mergeLog(op); checkCk(op); remoteAim(op); }
+  const others = ps.filter(function (p) { return !p.isMe && p.presence; });
+  NET.others = others;
+  NET.hostPeer = others.find(function (p) { return p.presence.role === 'host'; }) || null;
+  if (NET.role === 'host') hostManage(others);
+  if (!NET.started) { lobbyUpdate(others); return; }
+  // the game is running: is everybody here, and what have they sent?
+  const missing = [];
+  G.players.forEach(function (pl, i) {
+    if (i === ONLINE.me) return;
+    const id = seatPeer(i);
+    if (!id || !others.some(function (p) { return p.peer === id; })) missing.push(pl.name);
+  });
+  ONLINE.allHere = missing.length === 0; ONLINE.missing = missing;
+  others.forEach(function (p) { mergeLog(p.presence); });        // a note only counts if it continues my own history, so stray ones do no harm
+  if (NET.hostPeer) checkCk(NET.hostPeer.presence);
+  const tp = seatPeer(G.turn), tpp = tp && others.find(function (p) { return p.peer === tp; });
+  if (tpp) remoteAim(tpp.presence);
   refreshLock(); syncNote();
 }
 
 /* ---- the lobby ---- */
-function lobbyUpdate(opp) {
-  const op = opp ? opp.presence : null;
+function lobbyUpdate(others) {
+  const guests = others.filter(function (p) { return p.presence.role === 'guest'; });
   if (NET.role === 'host') {
-    if (!opp) { $('lbStatus').textContent = 'Waiting for your friend…'; $('btnLbGo').hidden = true; return; }
-    if (op.cfg) {                                   // my game is already running: pick it back up
-      NET.ep = op.ep | 0; NET.catchUp = true;
-      startOnline(op.cfg, NET.prof, profPresence(op));
+    const running = guests.filter(function (g) { return g.presence.cfg && plDecode(g.presence.pl); });
+    if (running.length) {                            // my game is already running: pick it back up from what the guests remember
+      const first = running[0].presence, pl = plDecode(first.pl);
+      NET.slots = new Array(pl.length - 1).fill(null);
+      running.forEach(function (g) { const k = (g.presence.sl | 0) - 1; if (k >= 0 && k < NET.slots.length && !NET.slots[k]) NET.slots[k] = g.peer; });
+      NET.ep = Math.max.apply(null, running.map(function (g) { return g.presence.ep | 0; })); NET.catchUp = true;
+      startOnline(first.cfg, pl, 0);
       return;
     }
-    const nm = profPresence(op).name || 'Your friend';
-    $('lbStatus').textContent = nm + ' joined. Ready when you are.';
-    $('btnLbGo').hidden = false; $('btnLbGo').textContent = 'Start game';
+    if (!NET.slots.length) { $('lbStatus').textContent = 'Waiting for your friends…'; $('btnLbGo').hidden = true; return; }
+    const names = NET.slots.map(function (id) { const g = guests.find(function (q) { return q.peer === id; }); return g ? profPresence(g.presence).name || 'A friend' : '?'; });
+    const n = NET.slots.length + 1;
+    $('lbStatus').textContent = names.join(', ') + (names.length === 1 ? ' has' : ' have') + ' joined (' + n + ' players so far)' + (n < 4 ? '. More friends can still join, or start now.' : '. The game is full.');
+    $('btnLbGo').hidden = false; $('btnLbGo').textContent = 'Start game (' + n + ' players)';
     return;
   }
   // guest
-  if (!opp) return;
-  const hostName = profPresence(op).name || 'Your friend';
+  const hp = NET.hostPeer ? NET.hostPeer.presence : null;
+  if (!hp) return;
+  const hostName = profPresence(hp).name || 'Your friend';
   if (!NET.joined && NET.auto) { joinAsGuest(); return; }
   if (!NET.joined) {
     $('lbTitle').textContent = hostName + ' invited you';
@@ -2405,27 +2513,35 @@ function lobbyUpdate(opp) {
     }
     return;
   }
-  if (op.acc && op.acc !== NET.peerId) { $('lbStatus').textContent = 'This game already has two players.'; return; }
-  if (op.cfg && op.acc === NET.peerId) {
-    NET.ep = op.ep | 0; NET.catchUp = !!op.log;
-    startOnline(op.cfg, profPresence(op), NET.prof);
+  const acc = accList(hp), idx = acc.indexOf(NET.peerId);
+  if (idx >= 0 && hp.cfg && plDecode(hp.pl)) {
+    NET.ep = hp.ep | 0; NET.catchUp = !!hp.log;
+    startOnline(hp.cfg, plDecode(hp.pl), idx + 1);
+  } else if (idx >= 0) {
+    $('lbStatus').textContent = 'Joined. Waiting for ' + hostName + ' to start…';
+  } else if (hp.cfg && acc.indexOf('-') < 0 && acc.length) {
+    $('lbStatus').textContent = 'This game is full and already running.';
+  } else if (hp.cfg) {
+    $('lbStatus').textContent = 'The game is running. Waiting for your seat…';
+  } else if (acc.length >= 3) {
+    $('lbStatus').textContent = 'This game is full.';
   } else $('lbStatus').textContent = 'Joined. Waiting for ' + hostName + ' to start…';
 }
 
-function startOnline(cfg, hostProf, guestProf) {
+function startOnline(cfg, pl, me) {
   const a = String(cfg).split('|');
   G.levelKey = LEVELS[a[0]] ? a[0] : 'downtown'; G.diffKey = DIFFICULTIES[a[1]] ? a[1] : 'medium';
   G.firstTo = GAME.firstToOptions.indexOf(+a[2]) >= 0 ? +a[2] : GAME.firstTo;
-  ONLINE.on = true; ONLINE.me = NET.role === 'host' ? 0 : 1; ONLINE.seed = +a[3] || 1; ONLINE.matchNo = NET.ep; ONLINE.oppHere = true;
-  const gp = Object.assign({}, guestProf);
-  if (!gp.name || gp.name === hostProf.name) gp.name = (hostProf.name || 'Player 1') === 'Player 2' ? 'Player 3' : 'Player 2';
-  G.players = [makePlayer(0, hostProf), makePlayer(1, gp)];
-  G.scores = [0, 0]; G.round = 0;
-  NET.cfg = cfg; NET.started = true; NET.log = []; NET.applied = 0;
+  ONLINE.on = true; ONLINE.me = me; ONLINE.seed = +a[3] || 1; ONLINE.matchNo = NET.ep; ONLINE.allHere = true; ONLINE.missing = [];
+  G.players = pl.map(function (pr, i) { return makePlayer(i, pr); });
+  G.scores = pl.map(function () { return 0; }); G.round = 0;
+  NET.cfg = cfg; NET.pl = pl; NET.started = true; NET.log = []; NET.applied = 0;
   showOnly('game');
   audioReady(); musicStart();
   startRound(false);
-  pub({ cfg: cfg, ep: NET.ep, log: '' });
+  const patch = { cfg: cfg, ep: NET.ep, log: '', pl: plEncode(pl) };
+  if (NET.role === 'guest') patch.sl = me;
+  pub(patch);
   refreshNet();
 }
 
@@ -2481,6 +2597,7 @@ function applyEntry(e) {
 
 function onlinePump() {
   if (!NET.started) return;
+  if (NET.role === 'host' && (NET.pumpN = (NET.pumpN | 0) + 1) % 60 === 0 && NET.slots.indexOf(null) >= 0) refreshNet();   // lets a waiting friend take a long-empty seat
   while (NET.applied < NET.log.length) {
     const e = NET.log[NET.applied], turbo = NET.catchUp || NET.log.length - NET.applied >= 2;
     if (turbo) fastForward();
@@ -2514,8 +2631,10 @@ function stateHash() {
   const m = G.mask;
   for (let i = 0; i < m.length; i += 7) h = (h * 31 + m[i]) | 0;
   G.gorillas.forEach(function (g) { h = (h * 31 + Math.round(g.x * 4)) | 0; h = (h * 31 + Math.round(g.y * 4)) | 0; });
-  G.players.forEach(function (p) { const f = p.fx; if (f) h = (h * 31 + f.umbrella * 3 + f.scope * 5 + (f.shrink ? 7 : 0) + (f.shook ? 11 : 0) + p.uses.mega * 13 + p.uses.triple * 17) | 0; });
-  h = (h * 31 + G.wind * 7 + G.turn + G.scores[0] * 3 + G.scores[1] * 5 + G.round) | 0;
+  G.players.forEach(function (p) { const f = p.fx; if (f) h = (h * 31 + f.umbrella * 3 + f.scope * 5 + (f.shrink ? 7 : 0) + (f.shook ? 11 : 0) + p.uses.mega * 13 + p.uses.triple * 17 + p.uses.plantain * 19) | 0; });
+  G.scores.forEach(function (sc, i) { h = (h * 31 + sc * (3 + 2 * i)) | 0; });
+  G.gorillas.forEach(function (g, i) { if (g.fell) h = (h * 31 + 5 + i) | 0; });
+  h = (h * 31 + G.wind * 7 + G.turn + G.round) | 0;
   return (h >>> 0).toString(36);
 }
 function onlineTurnStart() {
@@ -2531,7 +2650,7 @@ function checkCk(op) {
   }
 }
 function rebuildGame() {
-  G.scores = [0, 0]; G.round = 0; ONLINE.matchNo = NET.ep; NET.applied = 0; NET.catchUp = true;
+  G.scores = G.players.map(function () { return 0; }); G.round = 0; ONLINE.matchNo = NET.ep; NET.applied = 0; NET.catchUp = true;
   startRound(false);
 }
 
@@ -2540,7 +2659,7 @@ function syncNote() {
   let t = '';
   if (ONLINE.on && NET.room) {
     if (NET.room.connected && !NET.room.connected()) t = 'Reconnecting…';
-    else if (!ONLINE.oppHere) t = 'Waiting for ' + G.players[1 - ONLINE.me].name + ' to come back…';
+    else if (!ONLINE.allHere) t = 'Waiting for ' + (ONLINE.missing || []).join(' and ') + ' to come back…';
   }
   n.hidden = !t; n.textContent = t;
 }
@@ -2556,7 +2675,7 @@ $('btnResume').onclick = function () {
 $('btnLbLeave').onclick = function () { onlineLeave(false); showOnly('setup'); startRound(true); };
 function joinAsGuest() {
   NET.joined = true;
-  saveLast(NET.id, 'guest');
+  saveLast(NET.id, 'guest', NET.prof);
   pub(Object.assign(profPatch(NET.prof), { role: 'guest' }));
   $('lbGuest').hidden = true; $('btnLbGo').hidden = true; $('lbText').textContent = '';
   $('lbStatus').textContent = 'Joined. Waiting for the host to start…';
@@ -2564,10 +2683,21 @@ function joinAsGuest() {
 }
 $('btnLbGo').onclick = function () {
   if (NET.role === 'host') {
-    if (!NET.opp) return;
+    if (!NET.slots.length) return;
     const cfg = [S.level, S.diff, S.firstTo, Math.floor(Math.random() * 1e9)].join('|');
+    const pl = [NET.prof];
+    NET.slots.forEach(function (id) { const g = NET.others.find(function (q) { return q.peer === id; }); if (g) pl.push(profPresence(g.presence)); });
+    if (pl.length < 2) return;
+    const seen = {};                                   // every player needs a different name
+    pl.forEach(function (p, i) {
+      let nm = (p.name || '').trim() || 'Player ' + (i + 1), k = 2;
+      while (seen[nm.toLowerCase()]) nm = (p.name || 'Player ' + (i + 1)).slice(0, 11) + ' ' + k++;
+      seen[nm.toLowerCase()] = 1; p.name = nm;
+    });
+    NET.slots = NET.slots.slice(0, pl.length - 1);
     NET.ep = 0;
-    startOnline(cfg, NET.prof, profPresence(NET.opp.presence));
+    startOnline(cfg, pl, 0);
+    pub({ acc: (NET.accSent = NET.slots.map(function (id) { return id || '-'; }).join(',')) });
   } else joinAsGuest();
 };
 $('btnCopy').onclick = function () {
