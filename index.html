@@ -94,6 +94,7 @@ button { cursor: pointer; }
 }
 #controls.locked { opacity: 0.45; pointer-events: none; }
 .ctl { display: flex; align-items: center; gap: 6px; }
+body.pullonly .ctl.aim { display: none; }
 .ctl .lbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); width: 48px; }
 .ctl output { min-width: 62px; text-align: center; font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; }
 .adj { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); font-size: 22px; line-height: 1; touch-action: manipulation; }
@@ -239,13 +240,15 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
     <div class="sec"><span class="lbl">Music track</span><select id="optTrack" aria-label="Music track"></select></div>
     <div class="sec"><span class="lbl">First to</span><div class="seg" id="firstSeg"></div></div>
     <div class="toggles">
+      <label><input type="checkbox" id="optPull"> Pull-back aiming only (no angle or power buttons)</label>
       <label><input type="checkbox" id="optRelease"> Throw as soon as I let go</label>
       <label><input type="checkbox" id="optMusic" checked> Music</label>
       <label><input type="checkbox" id="optSfx" checked> Sound effects</label>
     </div>
     <button class="primary" id="btnStart" type="button">Start (one phone)</button>
     <div class="sec">
-      <button class="side" id="btnOnline" type="button">Play friends online</button>
+      <span class="lbl">Friends room</span>
+      <div class="row end"><input type="text" id="roomName" maxlength="24" aria-label="Room name" placeholder="room name, e.g. gorillas"><button class="side" id="btnOnline" type="button">Play friends online</button></div>
       <button class="side" id="btnResume" type="button" hidden>Rejoin my online game</button>
       <p class="hint" id="onlineMsg"></p>
     </div>
@@ -256,14 +259,15 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
 
 <div class="screen" id="lobby" hidden>
   <div class="card">
-    <h2 id="lbTitle">Online game</h2>
+    <h2 id="lbTitle">Game room</h2>
     <p id="lbText"></p>
-    <div id="lbLinkBox" hidden>
-      <span class="lbl">Invite link</span>
-      <div class="row end"><input type="text" id="lbLink" readonly aria-label="Invite link"><button id="btnCopy" type="button">Copy</button></div>
-      <p class="tiny">Send this link to up to three friends. Keep this page open until they join.</p>
+    <div id="lbLinkBox">
+      <span class="lbl">Room link (everyone uses the same one, any time)</span>
+      <div class="row end"><input type="text" id="lbLink" readonly aria-label="Room link"><button id="btnCopy" type="button">Copy</button></div>
     </div>
-    <div id="lbGuest" hidden>
+    <div class="sec"><span class="lbl">In the room</span><div id="lbList"></div></div>
+    <div class="sec">
+      <span class="lbl">You</span>
       <div class="pbox">
         <canvas id="gPv" width="168" height="192"></canvas>
         <div class="fields">
@@ -271,10 +275,20 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
           <div class="row"><select id="gGor" aria-label="Your gorilla"></select><input type="color" id="gCol" aria-label="Fur colour"></div>
         </div>
       </div>
+      <p class="tiny">You can change your name and gorilla any time between matches.</p>
+    </div>
+    <div class="sec" id="lbSet">
+      <span class="lbl">Game settings <span id="lbHostTag"></span></span>
+      <div id="lbSetEdit">
+        <div class="row"><select id="lbCity" aria-label="City"></select><select id="lbDiff" aria-label="Difficulty"></select><select id="lbFirst" aria-label="First to"></select></div>
+        <div class="toggles"><label><input type="checkbox" id="lbPull"> Pull-back aiming only</label></div>
+      </div>
+      <p id="lbSetText" class="hint"></p>
+      <button class="side" id="btnHost" type="button" hidden>Take over as host</button>
     </div>
     <p id="lbStatus"></p>
     <div class="row end">
-      <button class="primary" id="btnLbGo" type="button" hidden>Start</button>
+      <button class="primary" id="btnLbGo" type="button" hidden>Start now</button>
       <button id="btnLbLeave" type="button">Leave</button>
     </div>
   </div>
@@ -1863,7 +1877,7 @@ function crispRegion(G, x, y, r) {
 /* ---------------- game state ---------------- */
 /* Online play: both phones run the same game and replay each other's throws. See 07-online.js. */
 const ONLINE = { on: false, me: 0, applying: false, seed: 0, matchNo: 0, allHere: true, missing: [] };
-const NET = { room: null, role: null, id: null, log: [], applied: 0, ep: 0, started: false, ck: '', peerId: null, acc: null, cfg: null, prof: null, catchUp: false, slots: [], pl: null, hostPeer: null, others: [], accSent: '', vac: {} };
+const NET = { room: null, id: null, log: [], applied: 0, ep: 0, started: false, ck: '', peerId: null, cfg: null, prof: null, catchUp: false, pl: null, hostPeer: null, isHost: false, hs: null, others: [], people: [], live: [], vac: {} };
 /* Is it this phone's turn to act? Always true when playing on one phone. */
 function mine() { return !ONLINE.on || ONLINE.applying || (G.turn === ONLINE.me && ONLINE.allHere && NET.applied === NET.log.length); }
 /* Gorillas ease onto their perch after a hit; snap them so both phones start every shot from the same spot. */
@@ -1910,6 +1924,7 @@ function syncFx() { G.gorillas.forEach(function (g, i) { g.umbrella = G.players[
 
 /* Build a new city and put both gorillas on their roofs. */
 function startRound(menuMode) {
+  if (document.body) document.body.classList.toggle('pullonly', !!G.pullOnly && !menuMode);
   const lvl = LEVELS[G.levelKey], diff = DIFFICULTIES[G.diffKey];
   const seed = GAME.seed != null ? GAME.seed + G.round : (ONLINE.on ? ONLINE.seed + ONLINE.matchNo * 104729 + G.round * 7919 : Math.floor(Math.random() * 1e9));
   const rnd = mulberry32(seed);
@@ -1972,9 +1987,17 @@ function beginTurn() {
   lockControls(!mine());
   refreshAimUI();
   updateHud();
-  showBanner(p.name + (G.fresh ? ', you go first' : "'s turn"));
+  showBanner(p.name + (G.fresh ? ', you go first' : "'s turn"), needHint() ? 'Drag on the screen to aim, then tap Throw' : null);
   G.fresh = false;
   if (ONLINE.on) onlineTurnStart();
+}
+
+/* A turn that passes without a throw (the player ran out of time, or is away). */
+function doSkip() {
+  if (G.state !== 'aim') return;
+  if (ONLINE.on && !ONLINE.applying) onlineLog('k');
+  G.fresh = false; setMoveMode(false);
+  nextTurn();
 }
 
 function aliveCount() { return G.gorillas.filter(function (g) { return !g.fell; }).length; }
@@ -2070,7 +2093,7 @@ function doShake() {
 
 function doThrow() {
   if (G.state !== 'aim' || !mine()) return;
-  snapGorillas();
+  snapGorillas(); if (!ONLINE.applying) markHint();
   const p = G.players[G.turn], g = G.gorillas[G.turn], def = BANANAS[p.bananaKey];
   if (p.uses[p.bananaKey] <= 0) return;
   if (ONLINE.on && !ONLINE.applying) onlineLog('t' + p.aim.elev + '.' + p.aim.power + '.' + (p.aim.dir > 0 ? '+' : '-') + Object.keys(BANANAS).indexOf(p.bananaKey));
@@ -2383,7 +2406,7 @@ const $ = function (id) { return document.getElementById(id); };
 const STORE_KEY = 'rooftopBananas.setup.v1';
 
 const S = {
-  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, music: true, sfx: true, track: 'chestbeat', count: 2,
+  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, pullOnly: false, room: '', music: true, sfx: true, track: 'chestbeat', count: 2,
   players: [
     { name: 'Player 1', gorilla: 'silverback', fur: GORILLAS.silverback.fur },
     { name: 'Player 2', gorilla: 'goldie', fur: GORILLAS.goldie.fur },
@@ -2401,7 +2424,7 @@ function loadSetup() {
     if (GAME.firstToOptions.indexOf(saved.firstTo) >= 0) S.firstTo = saved.firstTo;
     if (TRACKS.some(function (t) { return t.id === saved.track; })) S.track = saved.track;
     if (saved.count >= 2 && saved.count <= 4) S.count = saved.count | 0;
-    S.release = !!saved.release; S.music = saved.music !== false; S.sfx = saved.sfx !== false;
+    S.pullOnly = !!saved.pullOnly; if (typeof saved.room === 'string') S.room = saved.room.slice(0, 24); S.release = !!saved.release; S.music = saved.music !== false; S.sfx = saved.sfx !== false;
     (saved.players || []).forEach(function (p, i) {
       if (S.players[i] && GORILLAS[p.gorilla]) S.players[i] = { name: String(p.name || '').slice(0, 14), gorilla: p.gorilla, fur: /^#[0-9a-f]{6}$/i.test(p.fur) ? p.fur : GORILLAS[p.gorilla].fur };
     });
@@ -2465,6 +2488,8 @@ function buildSetup() {
   });
   showPlayerBoxes();
 
+  $('optPull').checked = !!S.pullOnly;
+  $('optPull').onchange = function () { S.pullOnly = $('optPull').checked; saveSetup(); };
   $('optRelease').checked = S.release;
   AUDIO.musicMuted = !S.music; AUDIO.sfxMuted = !S.sfx; AUDIO.trackId = S.track; buildTrackLists(); syncAudioButtons();
   $('optRelease').onchange = function () { S.release = $('optRelease').checked; saveSetup(); };
@@ -2538,12 +2563,13 @@ function startGame() {
   audioReady(); musicStart(); playSound('click');
   saveSetup();
   G.levelKey = levelChoice(); G.diffKey = S.diff; G.players = currentPlayers();
-  G.scores = G.players.map(function () { return 0; }); G.round = 0; G.firstTo = S.firstTo;
+  G.scores = G.players.map(function () { return 0; }); G.round = 0; G.firstTo = S.firstTo; G.pullOnly = !!S.pullOnly;
   $('setup').hidden = true; $('over').hidden = true; $('hud').hidden = false;
   startRound(false);
 }
 
 function backToSetup() {
+  G.pullOnly = false;
   if (ONLINE.on || NET.room) onlineLeave(NET.started);
   $('hud').hidden = true; $('over').hidden = true; $('setup').hidden = false;
   G.levelKey = levelChoice(); G.diffKey = S.diff; G.players = currentPlayers();
@@ -2617,7 +2643,7 @@ function refreshAimUI() {
 }
 
 function adjust(k, d) {
-  if (G.state !== 'aim' || !mine()) return;
+  if (G.state !== 'aim' || !mine() || G.pullOnly) return;
   const a = G.players[G.turn].aim;
   if (k === 'elev') a.elev = Math.max(0, Math.min(90, a.elev + d));
   else a.power = Math.max(1, Math.min(100, a.power + d));
@@ -2641,15 +2667,27 @@ document.querySelectorAll('.adj').forEach(function (btn) {
 $('btnThrow').onclick = function () { audioReady(); doThrow(); };
 $('btnStart').onclick = startGame;
 $('btnSetup').onclick = backToSetup;
+/* The how-to-play hint shows on your turn until you have thrown once on this phone. */
+const HINT_KEY = 'rooftopBananas.hint.v1';
+function needHint() { try { return !localStorage.getItem(HINT_KEY) && mine(); } catch (e) { return false; } }
+function markHint() { try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {} }
+
 /* Next round, or a fresh match after someone wins. Both phones run this the same way. */
 function advanceRound() {
   const r = G.result, won = r && r.winner >= 0 && G.scores[r.winner] >= G.firstTo;
-  if (won) { G.scores = G.players.map(function () { return 0; }); G.round = 0; if (ONLINE.on) onlineNewMatch(); } else G.round++;
+  if (won && ONLINE.on) { onlineToRoom(); return; }          // online, a new match starts from the room screen
+  if (won) { G.scores = G.players.map(function () { return 0; }); G.round = 0; } else G.round++;
   $('over').hidden = true;
   startRound(false);
 }
 $('btnNext').onclick = function () {
-  if (ONLINE.on) { if (G.state !== 'roundover' || NET.applied < NET.log.length) return; onlineLog('n'); }
+  if (ONLINE.on) {
+    if (G.state !== 'roundover') return;
+    const r = G.result;
+    if (r && r.winner >= 0 && G.scores[r.winner] >= G.firstTo) { onlineToRoom(); return; }   // the match is over: back to the room
+    if (NET.applied < NET.log.length) return;
+    onlineLog('n');
+  }
   advanceRound();
 };
 $('btnMusic').onclick = function () { chooseMusic(AUDIO.musicMuted); };
@@ -2668,13 +2706,13 @@ function showRoundOver() {
   const r = G.result, p = G.players, sc = G.scores;
   const matchWin = r.winner >= 0 && sc[r.winner] >= G.firstTo;
   $('overTitle').textContent = r.winner < 0 ? 'Nobody left standing. Draw!' : (matchWin ? p[r.winner].name + ' wins the match!' : p[r.winner].name + ' wins the round');
-  $('overSub').textContent = matchWin ? 'Final score ' + sc.join(' - ') + '.' : 'First to ' + G.firstTo + (G.firstTo === 1 ? ' win' : ' wins') + ' takes the match.';
+  $('overSub').textContent = matchWin ? 'Final score ' + sc.join(' - ') + '.' + (ONLINE.on ? ' The next match starts by itself in the room.' : '') : 'First to ' + G.firstTo + (G.firstTo === 1 ? ' win' : ' wins') + ' takes the match.';
   $('overScores').innerHTML = '';
   p.forEach(function (pl, i) {
     const d = document.createElement('div'), n = document.createElement('span'), b = document.createElement('b');
     n.textContent = p[i].name; b.textContent = sc[i]; d.appendChild(n); d.appendChild(b); $('overScores').appendChild(d);
   });
-  $('btnNext').textContent = matchWin ? 'Play again' : 'Next round';
+  $('btnNext').textContent = matchWin ? (ONLINE.on ? 'Back to the room' : 'Play again') : 'Next round';
   $('btnSetup').textContent = ONLINE.on ? 'Leave game' : 'Change setup';
   $('over').hidden = false;
 }
@@ -2814,8 +2852,9 @@ function firebaseRoomApi() {
     join: async function (name) {
       const db = await fbReady();
       const peerId = 'p' + Math.random().toString(36).slice(2, 10);
-      const roomRef = db.ref('rb/' + name), meRef = roomRef.child(peerId), infoRef = db.ref('.info/connected');
-      let mine = {}, all = {}, connected = false, closed = false, timer = null;
+      const roomRef = db.ref('rb/' + name), meRef = roomRef.child(peerId), infoRef = db.ref('.info/connected'), offRef = db.ref('.info/serverTimeOffset');
+      const onOff = function (s) { offset = +s.val() || 0; };
+      let mine = {}, pend = {}, all = {}, connected = false, closed = false, timer = null, offset = 0;
       const peerHandlers = [], connHandlers = [];
 
       function snap() {
@@ -2825,82 +2864,90 @@ function firebaseRoomApi() {
         });
       }
       function notify() { const ps = snap(); peerHandlers.slice().forEach(function (h) { h({ peers: ps, joined: [], left: [], updated: [] }); }); }
-      function flush() { timer = null; if (!closed && connected) meRef.set(mine).catch(function () {}); }
+      function flush() { timer = null; if (closed || !connected) return; const p = pend; pend = {}; meRef.update(p).catch(function () {}); }   // only what changed is sent
 
       const onRoom = function (s) { all = s.val() || {}; notify(); };
       const onConn = function (s) {
         connected = !!s.val();
-        if (connected && !closed) { meRef.onDisconnect().remove(); meRef.set(mine).catch(function () {}); }
+        if (connected && !closed) { meRef.onDisconnect().remove(); pend = {}; meRef.set(mine).catch(function () {}); }
         connHandlers.slice().forEach(function (h) { h(connected); });
       };
       roomRef.on('value', onRoom);
       infoRef.on('value', onConn);
+      offRef.on('value', onOff);
 
       return {
         name: name,
         presence: function (patch) {
-          for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; }
+          for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; pend[k] = patch[k]; }
           if (JSON.stringify(mine).length > 4096) { return Promise.reject({ code: 'invalid_argument' }); }
           if (!timer) timer = setTimeout(flush, 40);
           setTimeout(notify, 0);
           return Promise.resolve();
         },
+        now: function () { return Date.now() + offset; },
         peers: snap,
         onPeers: function (h) { peerHandlers.push(h); setTimeout(notify, 0); return function () { const i = peerHandlers.indexOf(h); if (i >= 0) peerHandlers.splice(i, 1); }; },
         connected: function () { return connected; },
         onConnection: function (h) { connHandlers.push(h); setTimeout(function () { h(connected); }, 0); return function () { const i = connHandlers.indexOf(h); if (i >= 0) connHandlers.splice(i, 1); }; },
         leave: function () {
           closed = true; clearTimeout(timer);
-          roomRef.off('value', onRoom); infoRef.off('value', onConn);
+          roomRef.off('value', onRoom); infoRef.off('value', onConn); offRef.off('value', onOff);
           return meRef.remove().catch(function () {});
         }
       };
     }
   };
 }
-/* ---------------- playing friends online (2 to 4 phones) ----------------
-   How it works: every phone runs the whole game. Each phone only sends a short note for every action
-   ("t45.60.+0" = throw at 45 degrees, power 60, aiming right, banana 0; "mr" = move right; "n" = next round).
-   The other phones replay the note and get exactly the same result, because the city, wind and physics all come
-   from one shared seed. The notes ride on the room's presence (each phone's small shared "profile" object). */
+/* ---------------- playing friends online: one permanent room ----------------
+   A room is just a name (the part after the # in the link). Everybody who opens the link is in the same room, any time.
+   Nobody has to "host" on purpose: the first person in is the host automatically, anyone can take over, and if the host
+   goes quiet the role passes on by itself. The host only decides who sits where, the settings, and when a match starts
+   (it starts by itself after a short countdown, so nothing ever waits on one person).
 
-const NET_ID = /^g-[a-z0-9]{6,12}$/;
-const LAST_KEY = 'rooftopBananas.lastGame.v1';
-/* The last online game this phone was in, so leaving by accident (or closing the page) is never final. */
-function saveLast(id, role, prof) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: id, role: role, prof: prof || null })); } catch (e) {} }
-function forgetLast() { try { localStorage.removeItem(LAST_KEY); } catch (e) {} }
-function loadLast() {
-  try {
-    const o = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
-    if (o && NET_ID.test(o.id) && (o.role === 'host' || o.role === 'guest')) { if (o.prof) o.prof = cleanProf(o.prof); return o; }
-  } catch (e) {}
-  return null;
-}
+   How a match works: every phone runs the whole game. Each phone only sends a short note for every action
+   ("t45.60.+0" = throw at 45 degrees, power 60, aiming right, banana 0; "mr" = move right; "n" = next round;
+   "k" = this turn was skipped). The other phones replay the note and get exactly the same result, because the city,
+   wind and physics all come from one shared seed. The notes ride on each phone's small shared "profile" (its presence). */
+
+const ROOM_RE = /^(g-[a-z0-9]{6,12}|r-[a-z0-9]+(-[a-z0-9]+)*)$/;
+const LAST_KEY = 'rooftopBananas.lastRoom.v2';
+/* all the waiting times in one place (the tests shorten them) */
+const ROOM_T = { hb: 8000, away: 30000, countdown: 20, joinAdd: 10, afterMatch: 30, turn: 50, warn: 15, roundAuto: 10, absentSkip: 3, stranger: 25000, electWait: 1200, lostSeat: 4000, tick: 600 };
 const DIRS = { l: 'left', r: 'right', u: 'up', d: 'down' };
 
-function pub(patch) { if (NET.room) NET.room.presence(patch).catch(function () {}); }
-
-function netId() {
-  const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let s = 'g-';
-  for (let i = 0; i < 8; i++) s += c.charAt(Math.floor(Math.random() * c.length));
-  return s;
+function saveLast(id) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: id })); } catch (e) {} }
+function forgetLast() { try { localStorage.removeItem(LAST_KEY); } catch (e) {} }
+function loadLast() {
+  try { const o = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); if (o && ROOM_RE.test(o.id)) return o; } catch (e) {}
+  return null;
 }
+function roomName(raw) { return String(raw || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 22).replace(/-+$/, ''); }
+function roomId(raw) { const n = roomName(raw); return n.length >= 2 ? 'r-' + n : null; }
+
+function pub(patch) { if (NET.room) NET.room.presence(patch).catch(function () {}); }
+function nowMs() { return NET.room && NET.room.now ? NET.room.now() : Date.now(); }
 
 function cleanProf(o) {
   const g = GORILLAS[o.gorilla] ? o.gorilla : 'silverback';
   return { name: String(o.name || '').slice(0, 14), gorilla: g, fur: /^#[0-9a-f]{6}$/i.test(o.fur || '') ? o.fur : GORILLAS[g].fur };
 }
 function profPresence(pr) { return cleanProf({ name: pr.nm, gorilla: pr.gr, fur: pr.fu }); }
-function profPatch(pr) { return { v: 1, nm: pr.name, gr: pr.gorilla, fu: pr.fur }; }
+function profPatch(pr) { return { v: 2, nm: pr.name, gr: pr.gorilla, fu: pr.fur }; }
+/* a phone that has never been set up gets a friendly made-up name, so nobody has to type anything to join */
+function startProfile() {
+  const p = cleanProf(S.players[0]);
+  if (!p.name.trim() || /^player \d$/i.test(p.name.trim())) p.name = 'Guest ' + (10 + Math.floor(Math.random() * 90));
+  return p;
+}
 
 function showOnly(which) {
   $('setup').hidden = which !== 'setup'; $('lobby').hidden = which !== 'lobby'; $('over').hidden = true;
   $('hud').hidden = which !== 'game';
 }
 
-/* ---- opening and closing a game room ---- */
-async function openRoom(id, role) {
+/* ---- opening and leaving the room ---- */
+async function openRoom(id) {
   let api = null, room = null;
   if (FIREBASE_URL) {
     try { api = firebaseRoomApi(); await fbReady(); } catch (e) { throw { code: 'server-unreachable' }; }
@@ -2910,73 +2957,72 @@ async function openRoom(id, role) {
     if (!api) throw { code: 'room-unavailable' };
   }
   try { room = await api.join(id); } catch (e) { throw { code: 'join-' + ((e && e.code) || 'failed') }; }
-  Object.assign(NET, { room: room, id: id, role: role, log: [], applied: 0, ep: 0, started: false, ck: '', slots: [], pl: null, hostPeer: null, others: [], accSent: '', vac: {}, cfg: null, joined: false, catchUp: false, rebuilds: 0 });
+  Object.assign(NET, {
+    room: room, id: id, log: [], applied: 0, ep: 0, started: false, ck: '', pl: null, cfg: null, others: [], people: [], live: [],
+    hostPeer: null, isHost: false, claimed: false, hs: null, seen: {}, vac: {}, goSeen: {}, goN: 0, hb: 0, noHost: 0, rebuilds: 0, catchUp: false,
+    leftMid: -1, lostT: 0, turnT: 0, roverT: 0, warn: '', lastN: 0, finMid: -1, peerId: null
+  });
   NET.unsubs = [room.onPeers(refreshNet), room.onConnection(syncNote)];
 }
 
+function setHash(id) { try { if (id) location.hash = '#' + id; else if (typeof history !== 'undefined' && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }
+
 async function onlineLeave(keep) {
   const room = NET.room, unsubs = NET.unsubs || [];
-  NET.room = null; NET.started = false; NET.hostPeer = null; NET.others = []; NET.slots = []; ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false;
-  NET.log = []; NET.applied = 0;
+  NET.room = null; NET.started = false; NET.hostPeer = null; NET.others = []; NET.people = []; NET.live = []; NET.hs = null; NET.isHost = false; NET.claimed = false;
+  ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false; NET.log = []; NET.applied = 0;
+  clearInterval(NET.hbT); clearInterval(NET.tickT); NET.hbT = NET.tickT = null;
   $('netNote').hidden = true;
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
   if (!keep) forgetLast();
+  setHash(null);
   if (room) { try { await room.leave(); } catch (e) {} }
   $('btnResume').hidden = !(keep && loadLast());
 }
 
-function netError(text, code) {
+function netError(text) {
   if (FIREBASE_URL) text = 'Could not reach the game server. Check your internet connection and try again.';
   if (!$('lobby').hidden) { $('lbStatus').textContent = text; } else { $('onlineMsg').textContent = text; }
 }
 const NO_ONLINE = 'Online play is only open to people the host has shared this game with by email. Ask the host to add your email address in the Share menu, then open the invite link again while signed in to Claude with that email.';
 
-/* ---- host: make a game and an invite link ---- */
-async function hostOnline(resumeId) {
+/* ---- going into a room ---- */
+async function joinRoom(id) {
   audioReady();
-  const last = loadLast();
-  NET.prof = cleanProf(resumeId && last && last.prof ? last.prof : S.players[0]);
-  const id = resumeId || netId();
-  try {
-    await openRoom(id, 'host');
-  } catch (e) { netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
-  saveLast(id, 'host', NET.prof);
-  pub(Object.assign(profPatch(NET.prof), { role: 'host' }));
+  NET.prof = startProfile();
   showOnly('lobby');
-  $('lbTitle').textContent = resumeId ? 'Rejoining your game' : 'Invite your friends';
-  $('lbText').textContent = resumeId ? 'Looking for your game…' : 'Up to three friends open the link on their phones, pick a gorilla and tap Join. Start when everyone is in.';
-  $('lbLinkBox').hidden = false; $('lbGuest').hidden = true; $('btnLbGo').hidden = true;
+  $('lbTitle').textContent = 'Game room'; $('lbText').textContent = ''; $('lbStatus').textContent = 'Connecting…';
+  $('btnLbGo').hidden = true; $('btnHost').hidden = true;
   $('lbLink').value = (FIREBASE_URL ? location.href.split('#')[0].split('?')[0] : ONLINE_BASE) + '#' + id;
-  $('lbStatus').textContent = 'Waiting for your friends…';
-  refreshNet();
-}
-
-/* ---- guest: arrive from an invite link ---- */
-async function guestOnline(id) {
-  const last = loadLast(), auto = !!(last && last.role === 'guest' && last.id === id);
-  NET.prof = cleanProf(auto && last.prof ? last.prof : S.players[0]);
-  showOnly('lobby');
-  $('lbTitle').textContent = 'Bad Nanners!';
-  $('lbText').textContent = 'Looking for the game…';
-  $('lbLinkBox').hidden = true; $('lbGuest').hidden = true; $('btnLbGo').hidden = true;
-  $('lbStatus').textContent = '';
   try {
-    await openRoom(id, 'guest');
-  } catch (e) { $('lbText').textContent = ''; netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
-  NET.auto = auto;
-  setTimeout(function () {
-    if (NET.room && !NET.started && !NET.hostPeer) { $('lbText').textContent = ''; $('lbStatus').textContent = 'Cannot find that game. Ask your friend to keep their game open, then open the link again.'; }
-  }, 9000);
+    await openRoom(id);
+  } catch (e) { showOnly('setup'); netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
+  saveLast(id); setHash(id);
+  pub(Object.assign(profPatch(NET.prof), { jt: nowMs(), hb: 0 }));
+  fillEditor();
+  NET.hbT = setInterval(function () {
+    if (!NET.room || (typeof document !== 'undefined' && document.hidden)) return;
+    NET.hb = (NET.hb | 0) + 1; pub({ hb: NET.hb });
+  }, ROOM_T.hb);
+  NET.tickT = setInterval(function () { if (NET.room) refreshNet(); }, ROOM_T.tick);
   refreshNet();
 }
 
+function fillEditor() {
+  $('gName').value = NET.prof.name; $('gGor').value = NET.prof.gorilla; $('gCol').value = NET.prof.fur; guestPreview();
+}
 function guestPreview() {
   const cv = $('gPv'), c = cv.getContext('2d'), p = NET.prof, def = GORILLAS[p.gorilla];
   c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 84, 96);
   drawGorilla(c, { x: 42, y: 90, size: def.size, h: 68 * def.size, facing: -1, fur: p.fur, belly: def.belly, face: def.face, accessory: def.accessory, sprite: def.sprite, rot: 0 }, 'idle', 0);
 }
+/* a change to my own name or gorilla: tell the room, and remember it for next time on this phone */
+function profChanged() {
+  pub(profPatch(NET.prof));
+  S.players[0] = { name: NET.prof.name, gorilla: NET.prof.gorilla, fur: NET.prof.fur }; saveSetup();
+}
 
-/* ---- seats: player 0 is the host; guests take seats 1 to 3 in the order they joined ---- */
+/* ---- seats ---- */
 function plEncode(pl) { return JSON.stringify(pl.map(function (p) { return [p.name, p.gorilla, p.fur]; })); }
 function plDecode(str) {
   try {
@@ -2985,133 +3031,258 @@ function plDecode(str) {
     return a.map(function (r) { return cleanProf({ name: r[0], gorilla: r[1], fur: r[2] }); });
   } catch (e) { return null; }
 }
-function accList(hp) { return hp && hp.acc ? String(hp.acc).split(',') : []; }
-
+function accArr() { return NET.hs && NET.hs.acc ? String(NET.hs.acc).split(',') : []; }
+function mySeat() { return NET.peerId ? accArr().indexOf(NET.peerId) : -1; }
 /* The peer sitting in a seat right now, or null. */
-function seatPeer(i) {
-  if (i === 0) return NET.role === 'host' ? NET.peerId : (NET.hostPeer ? NET.hostPeer.peer : null);
-  if (NET.role === 'host') return NET.slots[i - 1] || null;
-  const id = accList(NET.hostPeer && NET.hostPeer.presence)[i - 1];
-  return id && id !== '-' ? id : null;
+function seatPeer(i) { const id = accArr()[i]; return id && id !== '-' ? id : null; }
+/* here = in the room and active; away = connected but gone quiet; gone = left or never came back */
+function seatStatus(i) {
+  const id = seatPeer(i);
+  if (!id) return 'gone';
+  const p = (NET.people || []).find(function (q) { return q.peer === id; });
+  if (!p) return 'gone';
+  return p.away ? 'away' : 'here';
 }
 
-/* The host keeps the seating plan: who sits where, and who takes a seat that has been left empty. */
-function hostManage(others) {
-  const guests = others.filter(function (p) { return p.presence.role === 'guest'; });
-  const here = function (id) { return guests.some(function (g) { return g.peer === id; }); };
-  if (!NET.started) {
-    NET.slots = NET.slots.filter(here);
-    guests.forEach(function (g) { if (NET.slots.length < 3 && NET.slots.indexOf(g.peer) < 0) NET.slots.push(g.peer); });
-  } else {
-    const now = Date.now();
-    NET.slots = NET.slots.map(function (id, i) {
-      if (id && here(id)) return id;
-      if (!NET.vac[i]) NET.vac[i] = now;                 // note when the seat was left empty
-      return null;
-    });
-    guests.forEach(function (g) {
-      if (NET.slots.indexOf(g.peer) >= 0) return;
-      const nm = profPresence(g.presence).name;
-      let v = -1;
-      for (let i = 0; i < NET.slots.length; i++) if (!NET.slots[i] && NET.pl && NET.pl[i + 1] && NET.pl[i + 1].name === nm) { v = i; break; }   // the same name gets its own seat back
-      if (v < 0) for (let i = 0; i < NET.slots.length; i++) if (!NET.slots[i] && now - NET.vac[i] > 25000) { v = i; break; }                      // a stranger only after a wait
-      if (v >= 0) { NET.slots[v] = g.peer; delete NET.vac[v]; }
-    });
-    NET.slots.forEach(function (id, i) { if (id) delete NET.vac[i]; });
-  }
-  const acc = NET.slots.map(function (id) { return id || '-'; }).join(',');
-  if (acc !== NET.accSent) { NET.accSent = acc; pub({ acc: acc }); }
+/* ---- who is the host ---- */
+function byJoin(a, b) { return ((a.presence.jt | 0) - (b.presence.jt | 0)) || (a.peer < b.peer ? -1 : 1); }
+function sigOf(p) { const x = p.presence; return [x.hb, x.ck, x.aim, x.ep, (x.log || '').length, x.go, x.nm, x.gr, x.fu, x.ho, x.fin, x.st, x.cdAt, x.mid, x.set].join('|'); }
+function hsFrom(x) { return { st: x.st || 'lobby', set: x.set || null, mid: +x.mid || 0, cfg: x.cfg || null, pl: x.pl || null, acc: x.acc || null, cdAt: +x.cdAt || 0, prev: x.prev || null }; }
+function localSet() { return [S.level, S.diff, S.firstTo, S.pullOnly ? 1 : 0].join('|'); }
+function parseSet(str) {
+  const a = String(str || '').split('|');
+  return {
+    lv: (LEVELS[a[0]] || a[0] === 'home') ? a[0] : 'downtown', diff: DIFFICULTIES[a[1]] ? a[1] : 'medium',
+    ft: GAME.firstToOptions.indexOf(+a[2]) >= 0 ? +a[2] : GAME.firstTo, pull: a[3] === '1'
+  };
+}
+/* the host changes room state; only what really changed is sent */
+function setHost(patch) {
+  const out = {}; let any = false;
+  Object.keys(patch).forEach(function (k) {
+    const v = patch[k] == null ? null : patch[k], cur = NET.hs[k] == null ? null : NET.hs[k];
+    if (cur === v) return;
+    any = true; if (v === null) delete NET.hs[k]; else NET.hs[k] = v; out[k] = v;
+  });
+  if (any) pub(out);
+}
+function claimHost(maxHo) {
+  const prev = NET.hs;
+  NET.hs = prev ? Object.assign({}, prev) : { st: 'lobby', set: localSet(), mid: 0 };
+  if (!NET.hs.set) NET.hs.set = localSet();
+  NET.claimed = true;
+  NET.goSeen = {};
+  (NET.people || []).forEach(function (p) { NET.goSeen[p.peer] = p.presence.go | 0; });
+  const patch = { ho: maxHo + 1 };
+  ['st', 'set', 'mid', 'cfg', 'pl', 'acc', 'cdAt', 'prev'].forEach(function (k) { if (NET.hs[k] != null) patch[k] = NET.hs[k]; });
+  NET.lastN = (NET.live || []).length;
+  pub(patch);
+}
+function relinquish() {
+  NET.claimed = false;
+  pub({ ho: null, st: null, set: null, mid: null, cfg: null, pl: null, acc: null, cdAt: null, prev: null });
 }
 
 function refreshNet() {
   if (!NET.room) return;
-  const ps = NET.room.peers(), me = ps.find(function (p) { return p.isMe && p.sameTab; });
-  if (me) NET.peerId = me.peer;
-  const others = ps.filter(function (p) { return !p.isMe && p.presence; });
-  NET.others = others;
-  NET.hostPeer = others.find(function (p) { return p.presence.role === 'host'; }) || null;
-  if (NET.role === 'host') hostManage(others);
-  if (!NET.started) { lobbyUpdate(others); return; }
-  // the game is running: is everybody here, and what have they sent?
-  const missing = [];
-  G.players.forEach(function (pl, i) {
-    if (i === ONLINE.me) return;
-    const id = seatPeer(i);
-    if (!id || !others.some(function (p) { return p.peer === id; })) missing.push(pl.name);
+  const ps = NET.room.peers(), t = Date.now();
+  const meP = ps.find(function (p) { return p.isMe && p.sameTab; });
+  if (meP) NET.peerId = meP.peer;
+  ps.forEach(function (p) {
+    if (!p.presence) return;
+    const sig = sigOf(p), s = NET.seen[p.peer];
+    if (!s || s.sig !== sig) NET.seen[p.peer] = { sig: sig, t: t };
   });
-  ONLINE.allHere = missing.length === 0; ONLINE.missing = missing;
-  others.forEach(function (p) { mergeLog(p.presence); });        // a note only counts if it continues my own history, so stray ones do no harm
-  if (NET.hostPeer) checkCk(NET.hostPeer.presence);
-  const tp = seatPeer(G.turn), tpp = tp && others.find(function (p) { return p.peer === tp; });
+  const people = ps.filter(function (p) { return p.presence && p.presence.nm !== undefined; });
+  people.forEach(function (p) { p.away = !p.isMe && t - NET.seen[p.peer].t > ROOM_T.away; });
+  const live = people.filter(function (p) { return !p.away; });
+  NET.people = people; NET.live = live; NET.others = people.filter(function (p) { return !p.isMe; });
+
+  let maxHo = 0;
+  people.forEach(function (p) { maxHo = Math.max(maxHo, p.presence.ho | 0); });
+  const acting = live.filter(function (p) { return (p.presence.ho | 0) > 0; })
+    .sort(function (a, b) { return ((b.presence.ho | 0) - (a.presence.ho | 0)) || (a.peer < b.peer ? -1 : 1); })[0] || null;
+  NET.hostPeer = acting; NET.isHost = !!(acting && acting.isMe);
+  if (!acting) {
+    if (!NET.noHost) NET.noHost = t;
+    const first = live.slice().sort(byJoin)[0];
+    if (first && first.isMe && me_ready() && t - NET.noHost > ROOM_T.electWait) { claimHost(maxHo); NET.isHost = true; NET.hostPeer = people.find(function (p) { return p.isMe; }) || null; }
+  } else NET.noHost = 0;
+  if (NET.claimed && !NET.isHost) relinquish();
+  if (acting && !acting.isMe) NET.hs = hsFrom(acting.presence);
+
+  if (NET.isHost) hostDuties(live, t);
+  enterMatch();
+  if (!NET.started) { lobbyUpdate(); return; }
+
+  // a match is running: who is here, and what have they sent?
+  const s = mySeat();
+  if (s >= 0) { ONLINE.me = s; NET.lostT = 0; }
+  else if (NET.hs && NET.hs.mid === NET.ep && NET.hs.st === 'play') { if (!NET.lostT) NET.lostT = t; else if (t - NET.lostT > ROOM_T.lostSeat) { onlineToRoom('Your seat was given to someone else while you were away.'); return; } }
+  const missing = [];
+  G.players.forEach(function (pl, i) { if (i !== ONLINE.me && seatStatus(i) !== 'here') missing.push(pl.name); });
+  ONLINE.allHere = true; ONLINE.missing = missing;
+  NET.others.forEach(function (p) { mergeLog(p.presence); });     // a note only counts if it continues my own history, so stray ones do no harm
+  if (NET.hostPeer && !NET.isHost) checkCk(NET.hostPeer.presence);
+  const tp = seatPeer(G.turn), tpp = tp && NET.others.find(function (p) { return p.peer === tp; });
   if (tpp) remoteAim(tpp.presence);
   refreshLock(); syncNote();
+  if (!$('lobby').hidden) lobbyUpdate();
+}
+function me_ready() { return !!NET.peerId; }
+
+/* ---- host duties ---- */
+function hostDuties(live, t) {
+  const hs = NET.hs;
+  if (hs.st === 'play') {
+    manageSeats(live);
+    if (hs.mid > 0 && NET.people.some(function (p) { return (p.presence.fin | 0) === hs.mid; })) {    // somebody saw the match end
+      setHost({ st: 'lobby', cfg: null, pl: null, prev: hs.acc, acc: null, cdAt: nowMs() + ROOM_T.afterMatch * 1000 });
+      NET.lastN = live.length;
+    }
+  } else lobbyHost(live);
 }
 
-/* ---- the lobby ---- */
-function lobbyUpdate(others) {
-  const guests = others.filter(function (p) { return p.presence.role === 'guest'; });
-  if (NET.role === 'host') {
-    const running = guests.filter(function (g) { return g.presence.cfg && plDecode(g.presence.pl); });
-    if (running.length) {                            // my game is already running: pick it back up from what the guests remember
-      const first = running[0].presence, pl = plDecode(first.pl);
-      NET.slots = new Array(pl.length - 1).fill(null);
-      running.forEach(function (g) { const k = (g.presence.sl | 0) - 1; if (k >= 0 && k < NET.slots.length && !NET.slots[k]) NET.slots[k] = g.peer; });
-      NET.ep = Math.max.apply(null, running.map(function (g) { return g.presence.ep | 0; })); NET.catchUp = true;
-      startOnline(first.cfg, pl, 0);
-      return;
-    }
-    if (!NET.slots.length) { $('lbStatus').textContent = 'Waiting for your friends…'; $('btnLbGo').hidden = true; return; }
-    const names = NET.slots.map(function (id) { const g = guests.find(function (q) { return q.peer === id; }); return g ? profPresence(g.presence).name || 'A friend' : '?'; });
-    const n = NET.slots.length + 1;
-    $('lbStatus').textContent = names.join(', ') + (names.length === 1 ? ' has' : ' have') + ' joined (' + n + ' players so far)' + (n < 4 ? '. More friends can still join, or start now.' : '. The game is full.');
-    $('btnLbGo').hidden = false; $('btnLbGo').textContent = 'Start game (' + n + ' players)';
-    return;
-  }
-  // guest
-  const hp = NET.hostPeer ? NET.hostPeer.presence : null;
-  if (!hp) return;
-  const hostName = profPresence(hp).name || 'Your friend';
-  if (!NET.joined && NET.auto) { joinAsGuest(); return; }
-  if (!NET.joined) {
-    $('lbTitle').textContent = hostName + ' invited you';
-    $('lbText').textContent = 'Pick your look, then tap Join.';
-    if ($('lbGuest').hidden) {
-      $('lbGuest').hidden = false;
-      $('gName').value = NET.prof.name; $('gGor').value = NET.prof.gorilla; $('gCol').value = NET.prof.fur; guestPreview();
-      $('btnLbGo').hidden = false; $('btnLbGo').textContent = 'Join';
-    }
-    return;
-  }
-  const acc = accList(hp), idx = acc.indexOf(NET.peerId);
-  if (idx >= 0 && hp.cfg && plDecode(hp.pl)) {
-    NET.ep = hp.ep | 0; NET.catchUp = !!hp.log;
-    startOnline(hp.cfg, plDecode(hp.pl), idx + 1);
-  } else if (idx >= 0) {
-    $('lbStatus').textContent = 'Joined. Waiting for ' + hostName + ' to start…';
-  } else if (hp.cfg && acc.indexOf('-') < 0 && acc.length) {
-    $('lbStatus').textContent = 'This game is full and already running.';
-  } else if (hp.cfg) {
-    $('lbStatus').textContent = 'The game is running. Waiting for your seat…';
-  } else if (acc.length >= 3) {
-    $('lbStatus').textContent = 'This game is full.';
-  } else $('lbStatus').textContent = 'Joined. Waiting for ' + hostName + ' to start…';
+/* who sits where while a match is running: a seat is freed when its phone leaves, the same name gets it back at once, a newcomer after a wait */
+function manageSeats(live) {
+  const acc = accArr(), pl = plDecode(NET.hs.pl) || [], now = Date.now();
+  let changed = false;
+  acc.forEach(function (id, i) {
+    if (id !== '-' && !NET.people.some(function (p) { return p.peer === id; })) { acc[i] = '-'; NET.vac[i] = now; changed = true; }
+    else if (id === '-' && !NET.vac[i]) NET.vac[i] = now;
+  });
+  live.forEach(function (p) {
+    if (acc.indexOf(p.peer) >= 0) return;
+    const nm = profPresence(p.presence).name;
+    let v = -1;
+    for (let i = 0; i < acc.length; i++) if (acc[i] === '-' && pl[i] && pl[i].name === nm) { v = i; break; }
+    if (v < 0) for (let i = 0; i < acc.length; i++) if (acc[i] === '-' && now - NET.vac[i] > ROOM_T.stranger) { v = i; break; }
+    if (v >= 0) { acc[v] = p.peer; delete NET.vac[v]; changed = true; }
+  });
+  if (changed) setHost({ acc: acc.join(',') });
 }
 
-function startOnline(cfg, pl, me) {
+/* between matches: count down and start by itself, so a host who does not know what to press never holds anyone up */
+function lobbyHost(live) {
+  const hs = NET.hs, n = live.length, nm = nowMs();
+  let go = false;
+  NET.people.forEach(function (p) { const g = p.presence.go | 0; if (g > (NET.goSeen[p.peer] | 0)) { NET.goSeen[p.peer] = g; go = true; } });
+  if (NET.startNow) { NET.startNow = false; go = true; }
+  if (n >= 2) {
+    let cd = hs.cdAt;
+    if (!cd) cd = nm + ROOM_T.countdown * 1000;
+    else if (n > NET.lastN) cd = Math.max(cd, nm + ROOM_T.joinAdd * 1000);          // someone new arrived: give them a moment
+    if (cd !== hs.cdAt) setHost({ cdAt: cd });
+    if (go || nm >= cd) startMatch(live);
+  } else if (hs.cdAt) setHost({ cdAt: 0 });
+  NET.lastN = n;
+}
+
+function startMatch(live) {
+  const hs = NET.hs, prev = hs.prev ? String(hs.prev).split(',') : [];
+  const rank = function (p) { const k = prev.indexOf(p.peer); return k < 0 ? [0, p.presence.jt | 0] : [1, k]; };
+  // people who sat out the last match go first; if there are more than four, the last seats of the previous match wait
+  const chosen = live.slice().sort(function (a, b) { const x = rank(a), y = rank(b); return (x[0] - y[0]) || (x[1] - y[1]) || (a.peer < b.peer ? -1 : 1); }).slice(0, 4).sort(byJoin);
+  if (chosen.length < 2) return;
+  const pl = chosen.map(function (p) { return profPresence(p.presence); }), seen = {};
+  pl.forEach(function (p, i) {                                  // every player needs a different name
+    let nm = (p.name || '').trim() || 'Player ' + (i + 1), k = 2;
+    while (seen[nm.toLowerCase()]) nm = (p.name || 'Player ' + (i + 1)).slice(0, 11) + ' ' + k++;
+    seen[nm.toLowerCase()] = 1; p.name = nm;
+  });
+  const st = parseSet(hs.set), homeKey = (GORILLAS[pl[0].gorilla] || {}).home;          // "Home city" = the first seat's character's city
+  const lv = st.lv === 'home' ? (LEVELS[homeKey] ? homeKey : 'downtown') : st.lv;
+  NET.vac = {};
+  setHost({ st: 'play', mid: (hs.mid | 0) + 1, cfg: [lv, st.diff, st.ft, Math.floor(Math.random() * 1e9), st.pull ? 1 : 0].join('|'), pl: plEncode(pl), acc: chosen.map(function (p) { return p.peer; }).join(','), cdAt: 0, prev: null });
+}
+
+/* ---- a match starts on this phone ---- */
+function enterMatch() {
+  const hs = NET.hs;
+  if (!hs || hs.st !== 'play' || !hs.cfg || !hs.pl || !hs.mid) return;
+  if ((NET.started && NET.ep === hs.mid) || hs.mid === NET.leftMid) return;
+  const pl = plDecode(hs.pl), seat = mySeat();
+  if (!pl || seat < 0 || seat >= pl.length) return;
+  startOnline(hs.cfg, pl, seat, hs.mid);
+}
+
+function startOnline(cfg, pl, me, mid) {
   const a = String(cfg).split('|');
   G.levelKey = LEVELS[a[0]] ? a[0] : 'downtown'; G.diffKey = DIFFICULTIES[a[1]] ? a[1] : 'medium';
   G.firstTo = GAME.firstToOptions.indexOf(+a[2]) >= 0 ? +a[2] : GAME.firstTo;
-  ONLINE.on = true; ONLINE.me = me; ONLINE.seed = +a[3] || 1; ONLINE.matchNo = NET.ep; ONLINE.allHere = true; ONLINE.missing = [];
+  G.pullOnly = a[4] === '1';
+  NET.ep = mid;
+  ONLINE.on = true; ONLINE.me = me; ONLINE.seed = +a[3] || 1; ONLINE.matchNo = mid; ONLINE.allHere = true; ONLINE.missing = [];
   G.players = pl.map(function (pr, i) { return makePlayer(i, pr); });
   G.scores = pl.map(function () { return 0; }); G.round = 0;
-  NET.cfg = cfg; NET.pl = pl; NET.started = true; NET.log = []; NET.applied = 0;
+  NET.catchUp = NET.others.some(function (p) { return (p.presence.ep | 0) === mid && p.presence.log; });    // joining a match that has already begun: replay it
+  NET.cfg = cfg; NET.pl = pl; NET.started = true; NET.log = []; NET.applied = 0; NET.rebuilds = 0; NET.lostT = 0; NET.finMid = -1; NET.vac = {};
+  NET.turnT = Date.now(); NET.roverT = 0; NET.warn = '';
   showOnly('game');
   audioReady(); musicStart();
   startRound(false);
-  const patch = { cfg: cfg, ep: NET.ep, log: '', pl: plEncode(pl) };
-  if (NET.role === 'guest') patch.sl = me;
-  pub(patch);
+  pub({ ep: mid, log: '', fin: null, aim: null, ck: null });
   refreshNet();
+}
+
+/* back to the room screen after a match (or when my seat is gone) */
+function onlineToRoom(msg) {
+  if (!NET.room) return;
+  NET.leftMid = NET.ep; NET.started = false; ONLINE.on = false; ONLINE.applying = false; ONLINE.allHere = true;
+  NET.log = []; NET.applied = 0; NET.catchUp = false; NET.warn = '';
+  pub({ ep: 0, log: '', fin: null, aim: null, ck: null });
+  $('netNote').hidden = true; $('over').hidden = true;
+  G.pullOnly = false; G.levelKey = levelChoice(); G.diffKey = S.diff; G.players = currentPlayers();
+  startRound(true);
+  showOnly('lobby');
+  if (msg) $('lbText').textContent = msg;
+  refreshNet();
+}
+
+/* ---- the room screen ---- */
+function personLabel(p) {
+  const pr = profPresence(p.presence);
+  return (pr.name || 'Someone') + ' (' + GORILLAS[pr.gorilla].label + ')';
+}
+function lobbyUpdate() {
+  if ($('lobby').hidden) return;
+  const hs = NET.hs, live = NET.live || [], people = (NET.people || []).slice().sort(byJoin), host = NET.hostPeer, seated = accArr();
+  const playing = !!(hs && hs.st === 'play');
+  // who is in the room
+  const list = $('lbList'); list.innerHTML = '';
+  people.forEach(function (p) {
+    const d = document.createElement('div'), tags = [];
+    if (p.isMe) tags.push('you'); if (host && host.peer === p.peer) tags.push('host'); if (p.away) tags.push('away');
+    if (playing) tags.push(seated.indexOf(p.peer) >= 0 ? 'playing' : 'waiting for the next match');
+    d.textContent = (p.away ? '○ ' : '● ') + personLabel(p) + (tags.length ? ' — ' + tags.join(', ') : '');
+    list.appendChild(d);
+  });
+  // settings: the host edits them, everybody else reads them
+  const st = parseSet(hs && hs.set ? hs.set : localSet());
+  if (NET.isHost) {
+    if ($('lbCity').value !== st.lv) $('lbCity').value = st.lv;
+    if ($('lbDiff').value !== st.diff) $('lbDiff').value = st.diff;
+    if (String($('lbFirst').value) !== String(st.ft)) $('lbFirst').value = String(st.ft);
+    $('lbPull').checked = st.pull;
+  }
+  $('lbSetEdit').hidden = !NET.isHost; $('lbSetText').hidden = NET.isHost;
+  $('lbSetText').textContent = 'City: ' + (st.lv === 'home' ? "Home city of the first player's gorilla" : LEVELS[st.lv].label) + '. ' + DIFFICULTIES[st.diff].label + '. First to ' + st.ft + (st.ft === 1 ? ' win' : ' wins') + '.' + (st.pull ? ' Pull-back aiming only.' : '');
+  $('lbHostTag').textContent = host ? '(host: ' + (host.isMe ? 'you' : (profPresence(host.presence).name || 'someone')) + ')' : '';
+  $('btnHost').hidden = !host || NET.isHost;
+  // what is going on
+  let text = '', can = false;
+  if (!host) text = 'Setting up the room…';
+  else if (playing) {
+    const names = (plDecode(hs.pl) || []).map(function (p) { return p.name; }).join(', ');
+    text = 'A match is in progress (' + names + '). You will be dealt into the next one, or into a seat that opens up.';
+  } else if (live.length < 2) text = 'Waiting for a friend. Send them the link above. It is the same link every time.';
+  else {
+    const left = Math.max(0, Math.ceil(((hs && hs.cdAt) - nowMs()) / 1000));
+    text = (hs && hs.cdAt ? 'The next match starts in ' + left + ' seconds. ' : '') + 'Pick your gorilla below. Anyone can tap Start now.';
+    can = true;
+  }
+  $('lbStatus').textContent = text;
+  $('btnLbGo').hidden = !can; $('btnLbGo').textContent = 'Start now';
 }
 
 /* ---- sending and receiving actions ---- */
@@ -3121,21 +3292,18 @@ function onlineLog(e) {
 }
 function publishLog() { pub({ log: NET.log.join(','), ep: NET.ep }); }
 
-/* A won match starts a new "epoch": the note list starts over, so it never outgrows presence. */
-function onlineNewMatch() {
-  ONLINE.matchNo++; NET.ep = ONLINE.matchNo; NET.log = []; NET.applied = 0;
-  pub({ ep: NET.ep, log: '' });
-}
-
 function mergeLog(op) {
-  const ep = op.ep | 0;
-  if (ep > NET.ep && G.state === 'roundover') {   // the other phone already started the next match
-    ONLINE.applying = true; try { advanceRound(); } finally { ONLINE.applying = false; }
+  if ((op.ep | 0) !== NET.ep) return;
+  const lg = op.log ? String(op.log).split(',') : [], n = Math.min(lg.length, NET.log.length);
+  let d = 0;
+  while (d < n && lg[d] === NET.log[d]) d++;
+  if (d < n) {                                       // the two histories split at entry d
+    if (NET.log[d] === 'k' && lg[d] !== 'k' && NET.rebuilds < 6) {      // a real move beats an automatic skip of that same turn
+      NET.log = lg.slice(); NET.rebuilds++; rebuildGame(); publishLog();
+    }
+    return;
   }
-  if (ep !== NET.ep) return;
-  const lg = op.log ? String(op.log).split(',') : [];
   if (lg.length <= NET.log.length) return;
-  for (let i = 0; i < NET.log.length; i++) if (lg[i] !== NET.log[i]) return;    // not a continuation of my history
   for (let i = NET.log.length; i < lg.length; i++) NET.log.push(lg[i]);
   publishLog();      // pass the full history on, so a phone that joins later can get it from me
 }
@@ -3148,7 +3316,6 @@ function fastForward() {
 }
 
 function applyEntry(e) {
-  const ep0 = NET.ep;
   ONLINE.applying = true;
   try {
     if (e.charAt(0) === 't') {
@@ -3159,14 +3326,14 @@ function applyEntry(e) {
     } else if (e.charAt(0) === 'm') doMove(DIRS[e.charAt(1)] || 'left');
     else if (e.charAt(0) === 'j') doJump(e.charAt(1) === 'r' ? 'right' : 'left');
     else if (e.charAt(0) === 's') doShake();
+    else if (e.charAt(0) === 'k') doSkip();
     else if (e.charAt(0) === 'n') advanceRound();
   } finally { ONLINE.applying = false; }
-  if (NET.ep === ep0) NET.applied++;      // a new match clears the list, so there is nothing to count
+  NET.applied++;
 }
 
 function onlinePump() {
   if (!NET.started) return;
-  if (NET.role === 'host' && (NET.pumpN = (NET.pumpN | 0) + 1) % 60 === 0 && NET.slots.indexOf(null) >= 0) refreshNet();   // lets a waiting friend take a long-empty seat
   while (NET.applied < NET.log.length) {
     const e = NET.log[NET.applied], turbo = NET.catchUp || NET.log.length - NET.applied >= 2;
     if (turbo) fastForward();
@@ -3175,7 +3342,34 @@ function onlinePump() {
     if (!turbo) break;
     fastForward();
   }
-  if (NET.applied >= NET.log.length && NET.catchUp) { NET.catchUp = false; refreshLock(); }
+  if (NET.applied >= NET.log.length && NET.catchUp) { NET.catchUp = false; NET.turnT = Date.now(); refreshLock(); }
+  netTimers();
+}
+
+/* Things that must keep moving even when a player does not know what to do (or has put the phone down). */
+function netTimers() {
+  if (NET.catchUp || NET.applied < NET.log.length) return;
+  const t = Date.now();
+  let warn = '';
+  if (G.state === 'aim') {
+    NET.roverT = 0;
+    const el = (t - (NET.turnT || t)) / 1000;
+    if (G.turn === ONLINE.me) {
+      const left = ROOM_T.turn - el;
+      if (left <= ROOM_T.warn) warn = 'Your turn ends in ' + Math.max(0, Math.ceil(left)) + '. Drag to aim, then Throw.';
+      if (left <= 0) doSkip();
+    } else {
+      const away = seatStatus(G.turn) !== 'here';
+      if (NET.isHost && ((away && el > ROOM_T.absentSkip) || el > ROOM_T.turn + 10)) doSkip();
+      else if (el > ROOM_T.turn + 25) doSkip();                        // the host is not helping either: anyone may skip
+    }
+  } else if (G.state === 'roundover') {
+    const r = G.result, won = r && r.winner >= 0 && G.scores[r.winner] >= G.firstTo;
+    if (won) { if (NET.finMid !== NET.ep) { NET.finMid = NET.ep; pub({ fin: NET.ep }); } }
+    else if (!NET.roverT) NET.roverT = t;
+    else if (t - NET.roverT > ROOM_T.roundAuto * 1000) { NET.roverT = 0; $('btnNext').onclick(); }      // nobody tapped Next: carry on
+  } else NET.roverT = 0;
+  if (warn !== NET.warn) { NET.warn = warn; syncNote(); }
 }
 
 /* ---- watching the other player aim ---- */
@@ -3194,7 +3388,7 @@ function remoteAim(op) {
   refreshAimUI();
 }
 
-/* ---- keeping the two phones honest ---- */
+/* ---- keeping the phones honest ---- */
 function stateHash() {
   let h = 17;
   const m = G.mask;
@@ -3208,11 +3402,12 @@ function stateHash() {
 }
 function onlineTurnStart() {
   NET.ck = NET.ep + ':' + NET.applied + ':' + stateHash();
+  NET.turnT = Date.now();
   pub({ ck: NET.ck });
   syncNote();
 }
 function checkCk(op) {
-  if (!op.ck || !NET.ck || NET.role !== 'guest' || G.state !== 'aim') return;
+  if (!op.ck || !NET.ck || NET.isHost || G.state !== 'aim') return;
   const a = String(op.ck).split(':'), b = NET.ck.split(':');
   if (a[0] === b[0] && a[1] === b[1] && a[2] !== b[2] && NET.rebuilds < 3) {   // same moment, different picture: rebuild from the notes
     NET.rebuilds++; rebuildGame();
@@ -3228,48 +3423,35 @@ function syncNote() {
   let t = '';
   if (ONLINE.on && NET.room) {
     if (NET.room.connected && !NET.room.connected()) t = 'Reconnecting…';
-    else if (!ONLINE.allHere) t = 'Waiting for ' + (ONLINE.missing || []).join(' and ') + ' to come back…';
+    else if (NET.warn) t = NET.warn;
+    else if ((ONLINE.missing || []).length) { const m = ONLINE.missing; t = m.join(' and ') + (m.length === 1 ? ' is' : ' are') + ' away. Their turns are skipped until they are back.'; }
   }
   n.hidden = !t; n.textContent = t;
 }
 
 /* ---- buttons ---- */
-$('btnOnline').onclick = function () { $('onlineMsg').textContent = ''; hostOnline(null); };
+$('btnOnline').onclick = function () {
+  const id = roomId($('roomName').value);
+  if (!id) { $('onlineMsg').textContent = 'Type a name for your room, such as gorillas (letters and numbers).'; return; }
+  S.room = roomName($('roomName').value); saveSetup();
+  $('onlineMsg').textContent = '';
+  joinRoom(id);
+};
 $('btnResume').onclick = function () {
   const last = loadLast();
   if (!last) return;
   $('onlineMsg').textContent = '';
-  if (last.role === 'host') hostOnline(last.id); else guestOnline(last.id);
+  joinRoom(last.id);
 };
 $('btnLbLeave').onclick = function () { onlineLeave(false); showOnly('setup'); startRound(true); };
-function joinAsGuest() {
-  NET.joined = true;
-  saveLast(NET.id, 'guest', NET.prof);
-  pub(Object.assign(profPatch(NET.prof), { role: 'guest' }));
-  $('lbGuest').hidden = true; $('btnLbGo').hidden = true; $('lbText').textContent = '';
-  $('lbStatus').textContent = 'Joined. Waiting for the host to start…';
-  refreshNet();
-}
 $('btnLbGo').onclick = function () {
-  if (NET.role === 'host') {
-    if (!NET.slots.length) return;
-    const homeKey = (GORILLAS[NET.prof.gorilla] || {}).home;      // "Home city" = the host's character's city
-    const lvKey = S.level === 'home' ? (LEVELS[homeKey] ? homeKey : 'downtown') : S.level;
-    const cfg = [lvKey, S.diff, S.firstTo, Math.floor(Math.random() * 1e9)].join('|');
-    const pl = [NET.prof];
-    NET.slots.forEach(function (id) { const g = NET.others.find(function (q) { return q.peer === id; }); if (g) pl.push(profPresence(g.presence)); });
-    if (pl.length < 2) return;
-    const seen = {};                                   // every player needs a different name
-    pl.forEach(function (p, i) {
-      let nm = (p.name || '').trim() || 'Player ' + (i + 1), k = 2;
-      while (seen[nm.toLowerCase()]) nm = (p.name || 'Player ' + (i + 1)).slice(0, 11) + ' ' + k++;
-      seen[nm.toLowerCase()] = 1; p.name = nm;
-    });
-    NET.slots = NET.slots.slice(0, pl.length - 1);
-    NET.ep = 0;
-    startOnline(cfg, pl, 0);
-    pub({ acc: (NET.accSent = NET.slots.map(function (id) { return id || '-'; }).join(',')) });
-  } else joinAsGuest();
+  if (NET.isHost) NET.startNow = true; else { NET.goN = (NET.goN | 0) + 1; pub({ go: NET.goN }); }
+  refreshNet();
+};
+$('btnHost').onclick = function () {
+  let maxHo = 0;
+  (NET.people || []).forEach(function (p) { maxHo = Math.max(maxHo, p.presence.ho | 0); });
+  claimHost(maxHo); refreshNet();
 };
 $('btnCopy').onclick = function () {
   const el = $('lbLink'), btn = $('btnCopy');
@@ -3278,22 +3460,30 @@ $('btnCopy').onclick = function () {
     navigator.clipboard.writeText(el.value).then(function () { done(true); }, function () { el.focus(); el.select(); done(false); });
   } catch (e) { el.focus(); el.select(); done(false); }
 };
-$('gName').oninput = function () { NET.prof.name = $('gName').value.slice(0, 14); };
-$('gCol').oninput = function () { NET.prof.fur = $('gCol').value; guestPreview(); };
-$('gGor').onchange = function () { NET.prof.gorilla = $('gGor').value; NET.prof.fur = GORILLAS[NET.prof.gorilla].fur; $('gCol').value = NET.prof.fur; guestPreview(); };
+$('gName').oninput = function () { NET.prof.name = $('gName').value.slice(0, 14); profChanged(); };
+$('gCol').oninput = function () { NET.prof.fur = $('gCol').value; guestPreview(); profChanged(); };
+$('gGor').onchange = function () { NET.prof.gorilla = $('gGor').value; NET.prof.fur = GORILLAS[NET.prof.gorilla].fur; $('gCol').value = NET.prof.fur; guestPreview(); profChanged(); };
+function hostSetFromUI() {
+  if (!NET.isHost) return;
+  setHost({ set: [$('lbCity').value, $('lbDiff').value, $('lbFirst').value, $('lbPull').checked ? 1 : 0].join('|') });
+  lobbyUpdate();
+}
+['lbCity', 'lbDiff', 'lbFirst'].forEach(function (id) { $(id).onchange = hostSetFromUI; });
+$('lbPull').onchange = hostSetFromUI;
 
-/* ---- start up: an invite link opens the join screen; a saved host game can be picked back up ---- */
+/* ---- start up: a room link takes you straight in ---- */
 (function () {
-  Object.keys(GORILLAS).forEach(function (k) {
-    const o = document.createElement('option'); o.value = k; o.textContent = GORILLAS[k].label; $('gGor').appendChild(o);
-  });
+  const addOpt = function (sel, v, text) { const o = document.createElement('option'); o.value = v; o.textContent = text; $(sel).appendChild(o); };
+  Object.keys(GORILLAS).forEach(function (k) { addOpt('gGor', k, GORILLAS[k].label); });
+  addOpt('lbCity', 'home', "Home city of the first player's gorilla");
+  Object.keys(LEVELS).forEach(function (k) { addOpt('lbCity', k, LEVELS[k].label); });
+  Object.keys(DIFFICULTIES).forEach(function (k) { addOpt('lbDiff', k, DIFFICULTIES[k].label); });
+  GAME.firstToOptions.forEach(function (n) { addOpt('lbFirst', String(n), 'First to ' + n); });
+  $('roomName').value = S.room || 'bananas';
+  try { document.addEventListener('visibilitychange', function () { if (NET.room && !document.hidden) { NET.hb = (NET.hb | 0) + 1; pub({ hb: NET.hb }); refreshNet(); } }); } catch (e) {}
   let hash = '';
   try { hash = (location.hash || '').replace('#', ''); } catch (e) {}
-  const last = loadLast();
-  if (NET_ID.test(hash)) {
-    if (last && last.role === 'host' && last.id === hash) hostOnline(hash); else guestOnline(hash);   // your own link brings you back as the host
-    return;
-  }
-  if (last) $('btnResume').hidden = false;
+  if (ROOM_RE.test(hash)) { joinRoom(hash); return; }
+  if (loadLast()) $('btnResume').hidden = false;
 })();
 </script></body></html>
