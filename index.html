@@ -139,6 +139,25 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
 .row.end button { min-height: 48px; border-radius: 12px; padding: 0 20px; border: 1px solid var(--line); background: var(--field); font-weight: 600; }
 .row.end .primary { border: 0; background: var(--banana); }
 .tiny { font-size: 13px; color: var(--muted); }
+.wide { width: 100%; min-height: 52px; font-size: 18px; margin-top: 10px; }
+#roomList { display: flex; flex-direction: column; gap: 8px; }
+.roomrow { display: flex; align-items: center; gap: 10px; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.roomrow .info { flex: 1 1 auto; min-width: 0; }
+.roomrow b { display: block; font-family: var(--font-display); font-weight: 400; color: var(--banana); }
+.roomrow span { display: block; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roomrow button { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--banana); color: var(--banana-ink); font-family: var(--font-display); }
+#hof { font-family: var(--font-display); background: #07061a; border: 2px solid #3b2f7a; border-radius: 12px; padding: 10px 14px; letter-spacing: 0.06em; }
+#hof .hrow { display: grid; grid-template-columns: 3.2em 1fr 3em; gap: 8px; padding: 3px 0; font-size: 16px; color: #8fe9ff; }
+#hof .hrow:nth-child(1) { color: #ffe45e; } #hof .hrow:nth-child(2) { color: #ff6bd5; } #hof .hrow:nth-child(3) { color: #5fe08a; }
+#hof .hrow b { text-align: right; font-weight: 400; }
+#hof .hrow span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
+#hof .hrow.me { text-shadow: 0 0 8px currentColor; }
+#hof .hnone { color: var(--muted); font-size: 14px; font-family: inherit; }
+details { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+details summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+details[open] summary { margin-bottom: 8px; }
+#lbList div { padding: 3px 0; }
+
 #overScores { display: flex; gap: 12px; flex-wrap: wrap; }
 #overScores div { flex: 1 1 140px; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 #overScores b { font-family: var(--font-display); font-size: 24px; color: var(--banana); font-weight: 400; }
@@ -227,11 +246,38 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
   </div>
 </div>
 
-<div class="screen" id="setup">
+<div class="screen" id="home">
   <div class="card">
     <div>
       <h1>Bad Nanners!</h1>
-      <p>Pass the phone around (2 to 4 players), or play friends on their own phones. Drag anywhere on the screen to aim, then press Throw.</p>
+      <p>Throw bananas, flatten rooftops, be the last gorilla standing.</p>
+    </div>
+    <div class="pbox">
+      <canvas id="hPv" width="168" height="192"></canvas>
+      <div class="fields">
+        <input type="text" id="hName" maxlength="14" aria-label="Your name" placeholder="Your name">
+        <div class="row"><select id="hGor" aria-label="Your gorilla"></select><input type="color" id="hCol" aria-label="Fur colour"></div>
+      </div>
+    </div>
+    <div class="sec">
+      <span class="lbl">Rooms</span>
+      <div id="roomList"></div>
+      <button class="primary wide" id="btnNewRoom" type="button">+ New room</button>
+      <p class="hint" id="homeMsg"></p>
+    </div>
+    <div class="sec" id="hofBox">
+      <span class="lbl">Hall of Fame</span>
+      <div id="hof"></div>
+    </div>
+    <button class="side" id="btnLocal" type="button">Play on one phone</button>
+  </div>
+</div>
+
+<div class="screen" id="setup" hidden>
+  <div class="card">
+    <div>
+      <h1>One phone</h1>
+      <p>Pass the phone around (2 to 4 players). Drag anywhere on the screen to aim, then press Throw.</p>
     </div>
     <div class="sec"><span class="lbl">City</span><select id="level" aria-label="City"></select></div>
     <div class="sec"><span class="lbl">Difficulty</span><div class="seg" id="diffSeg"></div><p class="hint" id="diffHint"></p></div>
@@ -245,13 +291,8 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
       <label><input type="checkbox" id="optMusic" checked> Music</label>
       <label><input type="checkbox" id="optSfx" checked> Sound effects</label>
     </div>
-    <button class="primary" id="btnStart" type="button">Start (one phone)</button>
-    <div class="sec">
-      <span class="lbl">Friends room</span>
-      <div class="row end"><input type="text" id="roomName" maxlength="24" aria-label="Room name" placeholder="room name, e.g. gorillas"><button class="side" id="btnOnline" type="button">Play friends online</button></div>
-      <button class="side" id="btnResume" type="button" hidden>Rejoin my online game</button>
-      <p class="hint" id="onlineMsg"></p>
-    </div>
+    <button class="primary" id="btnStart" type="button">Start</button>
+    <button class="side" id="btnHomeBack" type="button">&larr; Back to the rooms</button>
     <p class="tiny">Each player can mute the music or the effects on their own phone without changing the game.</p>
     <p class="tiny">Keyboard: Up/Down changes the angle, Left/Right changes the power, hold Shift for bigger steps, Enter throws.</p>
   </div>
@@ -259,15 +300,15 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
 
 <div class="screen" id="lobby" hidden>
   <div class="card">
-    <h2 id="lbTitle">Game room</h2>
+    <h2 id="lbTitle">Room</h2>
     <p id="lbText"></p>
-    <div id="lbLinkBox">
-      <span class="lbl">Room link (everyone uses the same one, any time)</span>
-      <div class="row end"><input type="text" id="lbLink" readonly aria-label="Room link"><button id="btnCopy" type="button">Copy</button></div>
+    <p id="lbStatus"></p>
+    <div id="lbList"></div>
+    <div class="row end">
+      <button class="primary" id="btnLbGo" type="button" hidden>Start now</button>
+      <button id="btnLbLeave" type="button">Leave room</button>
     </div>
-    <div class="sec"><span class="lbl">In the room</span><div id="lbList"></div></div>
-    <div class="sec">
-      <span class="lbl">You</span>
+    <details><summary>Change my gorilla</summary>
       <div class="pbox">
         <canvas id="gPv" width="168" height="192"></canvas>
         <div class="fields">
@@ -275,22 +316,18 @@ input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 10
           <div class="row"><select id="gGor" aria-label="Your gorilla"></select><input type="color" id="gCol" aria-label="Fur colour"></div>
         </div>
       </div>
-      <p class="tiny">You can change your name and gorilla any time between matches.</p>
-    </div>
-    <div class="sec" id="lbSet">
-      <span class="lbl">Game settings <span id="lbHostTag"></span></span>
+    </details>
+    <details id="lbSet"><summary>Game settings&nbsp;<span id="lbHostTag"></span></summary>
       <div id="lbSetEdit">
         <div class="row"><select id="lbCity" aria-label="City"></select><select id="lbDiff" aria-label="Difficulty"></select><select id="lbFirst" aria-label="First to"></select></div>
         <div class="toggles"><label><input type="checkbox" id="lbPull"> Pull-back aiming only</label></div>
       </div>
       <p id="lbSetText" class="hint"></p>
       <button class="side" id="btnHost" type="button" hidden>Take over as host</button>
-    </div>
-    <p id="lbStatus"></p>
-    <div class="row end">
-      <button class="primary" id="btnLbGo" type="button" hidden>Start now</button>
-      <button id="btnLbLeave" type="button">Leave</button>
-    </div>
+    </details>
+    <details id="lbLinkBox"><summary>Invite by link</summary>
+      <div class="row end"><input type="text" id="lbLink" readonly aria-label="Room link"><button id="btnCopy" type="button">Copy</button></div>
+    </details>
   </div>
 </div>
 
@@ -2406,7 +2443,7 @@ const $ = function (id) { return document.getElementById(id); };
 const STORE_KEY = 'rooftopBananas.setup.v1';
 
 const S = {
-  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, pullOnly: false, room: '', music: true, sfx: true, track: 'chestbeat', count: 2,
+  level: 'downtown', diff: 'medium', firstTo: GAME.firstTo, release: false, pullOnly: false, me: null, music: true, sfx: true, track: 'chestbeat', count: 2,
   players: [
     { name: 'Player 1', gorilla: 'silverback', fur: GORILLAS.silverback.fur },
     { name: 'Player 2', gorilla: 'goldie', fur: GORILLAS.goldie.fur },
@@ -2424,7 +2461,7 @@ function loadSetup() {
     if (GAME.firstToOptions.indexOf(saved.firstTo) >= 0) S.firstTo = saved.firstTo;
     if (TRACKS.some(function (t) { return t.id === saved.track; })) S.track = saved.track;
     if (saved.count >= 2 && saved.count <= 4) S.count = saved.count | 0;
-    S.pullOnly = !!saved.pullOnly; if (typeof saved.room === 'string') S.room = saved.room.slice(0, 24); S.release = !!saved.release; S.music = saved.music !== false; S.sfx = saved.sfx !== false;
+    S.pullOnly = !!saved.pullOnly; if (saved.me && typeof saved.me === 'object') S.me = cleanProf(saved.me); S.release = !!saved.release; S.music = saved.music !== false; S.sfx = saved.sfx !== false;
     (saved.players || []).forEach(function (p, i) {
       if (S.players[i] && GORILLAS[p.gorilla]) S.players[i] = { name: String(p.name || '').slice(0, 14), gorilla: p.gorilla, fur: /^#[0-9a-f]{6}$/i.test(p.fur) ? p.fur : GORILLAS[p.gorilla].fur };
     });
@@ -2507,7 +2544,7 @@ function drawPreview(i) {
 }
 
 /* Picture characters finish loading a moment after the page: redraw the previews then. */
-function onSpriteLoaded() { for (let i = 0; i < 4; i++) if ($('pv' + i)) drawPreview(i); try { guestPreview(); } catch (e) { /* online screen not built yet */ } }
+function onSpriteLoaded() { for (let i = 0; i < 4; i++) if ($('pv' + i)) drawPreview(i); try { guestPreview(); } catch (e) { /* online screen not built yet */ } try { homePreview(); } catch (e) { /* home screen not built yet */ } }
 
 /* The vest colour a character starts with in a given seat (drawn characters just use their own fur). */
 function seatFur(key, i) { const d = GORILLAS[key]; return (d.seatFur && d.seatFur[i]) || d.fur; }
@@ -2570,10 +2607,12 @@ function startGame() {
 
 function backToSetup() {
   G.pullOnly = false;
-  if (ONLINE.on || NET.room) onlineLeave(NET.started);
-  $('hud').hidden = true; $('over').hidden = true; $('setup').hidden = false;
+  const wasOnline = ONLINE.on || NET.room;
+  if (wasOnline) onlineLeave(false);
+  $('hud').hidden = true; $('over').hidden = true;
   G.levelKey = levelChoice(); G.diffKey = S.diff; G.players = currentPlayers();
   startRound(true);
+  if (wasOnline) showHome(); else $('setup').hidden = false;
 }
 
 /* ---------------- HUD ---------------- */
@@ -2854,6 +2893,8 @@ function firebaseRoomApi() {
       const peerId = 'p' + Math.random().toString(36).slice(2, 10);
       const roomRef = db.ref('rb/' + name), meRef = roomRef.child(peerId), infoRef = db.ref('.info/connected'), offRef = db.ref('.info/serverTimeOffset');
       const onOff = function (s) { offset = +s.val() || 0; };
+      const dirRef = db.ref('rb/_rd/' + name + '/' + peerId);       // a tiny public note so the home screen can list rooms; it disappears with the phone
+      let dirData = null;
       let mine = {}, pend = {}, all = {}, connected = false, closed = false, timer = null, offset = 0;
       const peerHandlers = [], connHandlers = [];
 
@@ -2869,7 +2910,7 @@ function firebaseRoomApi() {
       const onRoom = function (s) { all = s.val() || {}; notify(); };
       const onConn = function (s) {
         connected = !!s.val();
-        if (connected && !closed) { meRef.onDisconnect().remove(); pend = {}; meRef.set(mine).catch(function () {}); }
+        if (connected && !closed) { meRef.onDisconnect().remove(); dirRef.onDisconnect().remove(); pend = {}; meRef.set(mine).catch(function () {}); if (dirData) dirRef.set(dirData).catch(function () {}); }
         connHandlers.slice().forEach(function (h) { h(connected); });
       };
       roomRef.on('value', onRoom);
@@ -2886,6 +2927,7 @@ function firebaseRoomApi() {
           return Promise.resolve();
         },
         now: function () { return Date.now() + offset; },
+        dir: function (obj) { dirData = obj; if (connected && !closed) dirRef.set(obj).catch(function () {}); },
         peers: snap,
         onPeers: function (h) { peerHandlers.push(h); setTimeout(notify, 0); return function () { const i = peerHandlers.indexOf(h); if (i >= 0) peerHandlers.splice(i, 1); }; },
         connected: function () { return connected; },
@@ -2893,9 +2935,42 @@ function firebaseRoomApi() {
         leave: function () {
           closed = true; clearTimeout(timer);
           roomRef.off('value', onRoom); infoRef.off('value', onConn); offRef.off('value', onOff);
+          dirRef.remove().catch(function () {});
           return meRef.remove().catch(function () {});
         }
       };
+    }
+  };
+}
+
+/* ---------------- the home screen: open rooms and the all-time scoreboard ----------------
+   rb/_rd/<room>/<phone>  one tiny note per phone in a room. A room with no phones has no notes, so empty rooms vanish by themselves.
+   rb/_hs/<name>          the Hall of Fame: matches won, rounds won, matches played.
+   rb/_mr/<match>         a record that this match was already counted (so four phones never count it four times). */
+function nameKey(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14) || 'x'; }
+function firebaseHomeApi() {
+  async function watch(path, cb) {
+    const db = await fbReady(), ref = db.ref(path), h = function (s) { cb(s.val() || {}); };
+    ref.on('value', h);
+    return function () { ref.off('value', h); };
+  }
+  return {
+    watchRooms: function (cb) { return watch('rb/_rd', cb); },
+    watchScores: function (cb) { return watch('rb/_hs', cb); },
+    /* rec = { names: [...], rounds: [...], winner: index }. Counted once, by whichever phone gets there first. */
+    record: async function (key, rec) {
+      const db = await fbReady();
+      const r = await db.ref('rb/_mr/' + key).transaction(function (cur) { return cur ? undefined : { t: Date.now(), w: rec.names[rec.winner] }; });
+      if (!r || !r.committed) return false;
+      for (let i = 0; i < rec.names.length; i++) {
+        const nm = rec.names[i], won = i === rec.winner, rounds = rec.rounds[i] | 0;
+        await db.ref('rb/_hs/' + nameKey(nm)).transaction(function (cur) {
+          cur = cur || { n: nm, w: 0, r: 0, m: 0 };
+          cur.n = nm; cur.m = (cur.m | 0) + 1; cur.r = (cur.r | 0) + rounds; if (won) cur.w = (cur.w | 0) + 1;
+          return cur;
+        });
+      }
+      return true;
     }
   };
 }
@@ -2935,14 +3010,17 @@ function cleanProf(o) {
 function profPresence(pr) { return cleanProf({ name: pr.nm, gorilla: pr.gr, fur: pr.fu }); }
 function profPatch(pr) { return { v: 2, nm: pr.name, gr: pr.gorilla, fu: pr.fur }; }
 /* a phone that has never been set up gets a friendly made-up name, so nobody has to type anything to join */
-function startProfile() {
-  const p = cleanProf(S.players[0]);
-  if (!p.name.trim() || /^player \d$/i.test(p.name.trim())) p.name = 'Guest ' + (10 + Math.floor(Math.random() * 90));
-  return p;
+function startProfile() { return cleanProf(S.me || {}); }
+/* the first time on a phone: a made-up name and a random gorilla, so nobody has to type or choose anything to start */
+function ensureMe() {
+  if (S.me && S.me.name) return;
+  const keys = Object.keys(GORILLAS), g = keys[Math.floor(Math.random() * keys.length)];
+  S.me = { name: 'Guest ' + (10 + Math.floor(Math.random() * 90)), gorilla: g, fur: GORILLAS[g].fur };
+  saveSetup();
 }
 
 function showOnly(which) {
-  $('setup').hidden = which !== 'setup'; $('lobby').hidden = which !== 'lobby'; $('over').hidden = true;
+  $('home').hidden = which !== 'home'; $('setup').hidden = which !== 'setup'; $('lobby').hidden = which !== 'lobby'; $('over').hidden = true;
   $('hud').hidden = which !== 'game';
 }
 
@@ -2971,18 +3049,17 @@ async function onlineLeave(keep) {
   const room = NET.room, unsubs = NET.unsubs || [];
   NET.room = null; NET.started = false; NET.hostPeer = null; NET.others = []; NET.people = []; NET.live = []; NET.hs = null; NET.isHost = false; NET.claimed = false;
   ONLINE.on = false; ONLINE.allHere = true; ONLINE.applying = false; NET.log = []; NET.applied = 0;
-  clearInterval(NET.hbT); clearInterval(NET.tickT); NET.hbT = NET.tickT = null;
+  clearInterval(NET.hbT); clearInterval(NET.tickT); NET.hbT = NET.tickT = null; NET.dirKey = '';
   $('netNote').hidden = true;
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
   if (!keep) forgetLast();
   setHash(null);
   if (room) { try { await room.leave(); } catch (e) {} }
-  $('btnResume').hidden = !(keep && loadLast());
 }
 
 function netError(text) {
   if (FIREBASE_URL) text = 'Could not reach the game server. Check your internet connection and try again.';
-  if (!$('lobby').hidden) { $('lbStatus').textContent = text; } else { $('onlineMsg').textContent = text; }
+  if (!$('lobby').hidden) { $('lbStatus').textContent = text; } else { $('homeMsg').textContent = text; }
 }
 const NO_ONLINE = 'Online play is only open to people the host has shared this game with by email. Ask the host to add your email address in the Share menu, then open the invite link again while signed in to Claude with that email.';
 
@@ -2990,13 +3067,14 @@ const NO_ONLINE = 'Online play is only open to people the host has shared this g
 async function joinRoom(id) {
   audioReady();
   NET.prof = startProfile();
+  stopDirectory();
   showOnly('lobby');
-  $('lbTitle').textContent = 'Game room'; $('lbText').textContent = ''; $('lbStatus').textContent = 'Connecting…';
+  $('lbTitle').textContent = roomLabel(id); $('lbText').textContent = ''; $('lbStatus').textContent = 'Connecting…';
   $('btnLbGo').hidden = true; $('btnHost').hidden = true;
   $('lbLink').value = (FIREBASE_URL ? location.href.split('#')[0].split('?')[0] : ONLINE_BASE) + '#' + id;
   try {
     await openRoom(id);
-  } catch (e) { showOnly('setup'); netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
+  } catch (e) { showHome(); netError(NO_ONLINE + ' (' + ((e && e.code) || 'error') + ')'); return; }
   saveLast(id); setHash(id);
   pub(Object.assign(profPatch(NET.prof), { jt: nowMs(), hb: 0 }));
   fillEditor();
@@ -3019,7 +3097,14 @@ function guestPreview() {
 /* a change to my own name or gorilla: tell the room, and remember it for next time on this phone */
 function profChanged() {
   pub(profPatch(NET.prof));
-  S.players[0] = { name: NET.prof.name, gorilla: NET.prof.gorilla, fur: NET.prof.fur }; saveSetup();
+  S.me = { name: NET.prof.name, gorilla: NET.prof.gorilla, fur: NET.prof.fur }; saveSetup();
+  syncDir();
+}
+/* the tiny public note the home screen reads: who is in this room, and is a match on */
+function syncDir() {
+  if (!NET.room || !NET.room.dir || !NET.prof) return;
+  const d = { n: NET.prof.name || 'Someone', p: NET.hs && NET.hs.st === 'play' ? 1 : 0 }, k = d.n + '|' + d.p;
+  if (k !== NET.dirKey) { NET.dirKey = k; NET.room.dir(d); }
 }
 
 /* ---- seats ---- */
@@ -3112,6 +3197,7 @@ function refreshNet() {
   if (acting && !acting.isMe) NET.hs = hsFrom(acting.presence);
 
   if (NET.isHost) hostDuties(live, t);
+  syncDir();
   enterMatch();
   if (!NET.started) { lobbyUpdate(); return; }
 
@@ -3275,7 +3361,7 @@ function lobbyUpdate() {
   else if (playing) {
     const names = (plDecode(hs.pl) || []).map(function (p) { return p.name; }).join(', ');
     text = 'A match is in progress (' + names + '). You will be dealt into the next one, or into a seat that opens up.';
-  } else if (live.length < 2) text = 'Waiting for a friend. Send them the link above. It is the same link every time.';
+  } else if (live.length < 2) text = 'Waiting for a friend. Tell them to open this page and join ' + roomLabel(NET.id) + '.';
   else {
     const left = Math.max(0, Math.ceil(((hs && hs.cdAt) - nowMs()) / 1000));
     text = (hs && hs.cdAt ? 'The next match starts in ' + left + ' seconds. ' : '') + 'Pick your gorilla below. Anyone can tap Start now.';
@@ -3365,7 +3451,7 @@ function netTimers() {
     }
   } else if (G.state === 'roundover') {
     const r = G.result, won = r && r.winner >= 0 && G.scores[r.winner] >= G.firstTo;
-    if (won) { if (NET.finMid !== NET.ep) { NET.finMid = NET.ep; pub({ fin: NET.ep }); } }
+    if (won) { if (NET.finMid !== NET.ep) { NET.finMid = NET.ep; pub({ fin: NET.ep }); recordResult(); } }
     else if (!NET.roverT) NET.roverT = t;
     else if (t - NET.roverT > ROOM_T.roundAuto * 1000) { NET.roverT = 0; $('btnNext').onclick(); }      // nobody tapped Next: carry on
   } else NET.roverT = 0;
@@ -3430,20 +3516,7 @@ function syncNote() {
 }
 
 /* ---- buttons ---- */
-$('btnOnline').onclick = function () {
-  const id = roomId($('roomName').value);
-  if (!id) { $('onlineMsg').textContent = 'Type a name for your room, such as gorillas (letters and numbers).'; return; }
-  S.room = roomName($('roomName').value); saveSetup();
-  $('onlineMsg').textContent = '';
-  joinRoom(id);
-};
-$('btnResume').onclick = function () {
-  const last = loadLast();
-  if (!last) return;
-  $('onlineMsg').textContent = '';
-  joinRoom(last.id);
-};
-$('btnLbLeave').onclick = function () { onlineLeave(false); showOnly('setup'); startRound(true); };
+$('btnLbLeave').onclick = function () { onlineLeave(false); startRound(true); showHome(); };
 $('btnLbGo').onclick = function () {
   if (NET.isHost) NET.startNow = true; else { NET.goN = (NET.goN | 0) + 1; pub({ go: NET.goN }); }
   refreshNet();
@@ -3471,19 +3544,117 @@ function hostSetFromUI() {
 ['lbCity', 'lbDiff', 'lbFirst'].forEach(function (id) { $(id).onchange = hostSetFromUI; });
 $('lbPull').onchange = hostSetFromUI;
 
-/* ---- start up: a room link takes you straight in ---- */
+/* ---------------- the home screen ---------------- */
+let HOME = null, homeStops = [], homeDir = {}, homeScores = {}, homeAuto = false;
+function roomLabel(id) {
+  if (/^g-/.test(id)) return 'Friends room';
+  const n = id.replace(/^r-/, '').replace(/-/g, ' ');
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+function stopDirectory() { homeStops.forEach(function (u) { try { u(); } catch (e) {} }); homeStops = []; }
+function showHome() {
+  showOnly('home');
+  fillHomeEditor(); renderRooms(); renderScores();
+  stopDirectory();
+  $('homeMsg').textContent = '';
+  if (!FIREBASE_URL) { $('homeMsg').textContent = 'Online rooms need the game server. Use "Play on one phone" for now.'; return; }
+  HOME = HOME || firebaseHomeApi();
+  const alive = { v: true };
+  homeStops.push(function () { alive.v = false; });
+  const hook = function (p) { p.then(function (u) { if (alive.v) homeStops.push(u); else u(); }).catch(function () { if (alive.v) $('homeMsg').textContent = 'Could not reach the game server. Check your internet connection.'; }); };
+  hook(HOME.watchRooms(function (d) { if (!alive.v) return; homeDir = d || {}; renderRooms(); maybeAutoJoin(); }));
+  hook(HOME.watchScores(function (d) { if (!alive.v) return; homeScores = d || {}; renderScores(); }));
+}
+/* the open rooms: every phone in a room leaves a tiny note, so a room nobody is in simply is not there */
+function roomsFromDir() {
+  const out = [];
+  Object.keys(homeDir || {}).forEach(function (id) {
+    if (!ROOM_RE.test(id)) return;
+    const peers = homeDir[id] || {}, names = [];
+    let playing = false;
+    Object.keys(peers).forEach(function (k) { const v = peers[k] || {}; names.push(String(v.n || 'Someone')); if (v.p) playing = true; });
+    if (names.length) out.push({ id: id, names: names, playing: playing });
+  });
+  out.sort(function (a, b) { return a.id.length - b.id.length || (a.id < b.id ? -1 : 1); });
+  return out;
+}
+function renderRooms() {
+  const box = $('roomList'); box.innerHTML = '';
+  const rooms = roomsFromDir();
+  if (!rooms.length) { const p = document.createElement('p'); p.textContent = 'No rooms are open right now. Tap New room to start one, then ask your friends to open this page.'; box.appendChild(p); return; }
+  rooms.forEach(function (r) {
+    const row = document.createElement('div'), info = document.createElement('div'), t = document.createElement('b'), d = document.createElement('span'), btn = document.createElement('button');
+    row.className = 'roomrow'; info.className = 'info';
+    t.textContent = roomLabel(r.id); d.textContent = r.names.join(', ') + ' · ' + (r.playing ? 'playing now' : 'waiting for players');
+    btn.type = 'button'; btn.textContent = 'Join'; btn.onclick = function () { joinRoom(r.id); };
+    info.appendChild(t); info.appendChild(d); row.appendChild(info); row.appendChild(btn); box.appendChild(row);
+  });
+}
+function newRoom() {
+  const used = {};
+  roomsFromDir().forEach(function (r) { const m = /^r-room-(\d+)$/.exec(r.id); if (m) used[+m[1]] = 1; });
+  let n = 1; while (used[n]) n++;
+  joinRoom('r-room-' + n);
+}
+/* the all-time scoreboard, like an old arcade machine */
+function renderScores() {
+  const box = $('hof'); box.innerHTML = '';
+  const rows = Object.keys(homeScores || {}).map(function (k) { return Object.assign({ k: k }, homeScores[k]); })
+    .filter(function (r) { return (r.w | 0) > 0; })
+    .sort(function (a, b) { return ((b.w | 0) - (a.w | 0)) || ((b.r | 0) - (a.r | 0)) || ((a.m | 0) - (b.m | 0)); }).slice(0, 10);
+  if (!rows.length) { const p = document.createElement('div'); p.className = 'hnone'; p.textContent = 'No scores yet. Win a match to be the first on the board!'; box.appendChild(p); return; }
+  const me = nameKey(S.me && S.me.name), ord = ['1ST', '2ND', '3RD'];
+  rows.forEach(function (r, i) {
+    const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span'), c = document.createElement('b');
+    d.className = 'hrow' + (r.k === me ? ' me' : '');
+    a.textContent = ord[i] || (i + 1) + 'TH'; b.textContent = String(r.n || r.k); c.textContent = String(r.w | 0);
+    d.appendChild(a); d.appendChild(b); d.appendChild(c); box.appendChild(d);
+  });
+}
+/* a finished match goes on the board once, no matter how many phones saw it end */
+function recordResult() {
+  if (!FIREBASE_URL || !G.result) return;
+  HOME = HOME || firebaseHomeApi();
+  const key = NET.id + '-' + NET.ep + '-' + (ONLINE.seed % 1000000);
+  HOME.record(key, { names: G.players.map(function (p) { return p.name; }), rounds: G.scores.slice(), winner: G.result.winner }).catch(function () {});
+}
+/* a phone that was closed by accident goes straight back to its room, if the room is still open */
+function maybeAutoJoin() {
+  if (homeAuto) return;
+  homeAuto = true;
+  const last = loadLast();
+  if (last && homeDir[last.id] && NET.room == null) joinRoom(last.id);
+}
+
+function fillHomeEditor() {
+  ensureMe();
+  $('hName').value = S.me.name; $('hGor').value = S.me.gorilla; $('hCol').value = S.me.fur; homePreview();
+}
+function homePreview() {
+  const cv = $('hPv'), c = cv.getContext('2d'), p = cleanProf(S.me || {}), def = GORILLAS[p.gorilla];
+  c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 84, 96);
+  drawGorilla(c, { x: 42, y: 90, size: def.size, h: 68 * def.size, facing: -1, fur: p.fur, belly: def.belly, face: def.face, accessory: def.accessory, sprite: def.sprite, rot: 0 }, 'idle', 0);
+}
+$('hName').oninput = function () { S.me.name = $('hName').value.slice(0, 14); saveSetup(); };
+$('hCol').oninput = function () { S.me.fur = $('hCol').value; saveSetup(); homePreview(); };
+$('hGor').onchange = function () { S.me.gorilla = $('hGor').value; S.me.fur = GORILLAS[S.me.gorilla].fur; $('hCol').value = S.me.fur; saveSetup(); homePreview(); };
+$('btnNewRoom').onclick = newRoom;
+$('btnLocal').onclick = function () { stopDirectory(); showOnly('setup'); };
+$('btnHomeBack').onclick = function () { showHome(); };
+
+/* ---- start up: the home screen, or straight into a room if you opened a room link ---- */
 (function () {
   const addOpt = function (sel, v, text) { const o = document.createElement('option'); o.value = v; o.textContent = text; $(sel).appendChild(o); };
-  Object.keys(GORILLAS).forEach(function (k) { addOpt('gGor', k, GORILLAS[k].label); });
+  Object.keys(GORILLAS).forEach(function (k) { addOpt('gGor', k, GORILLAS[k].label); addOpt('hGor', k, GORILLAS[k].label); });
   addOpt('lbCity', 'home', "Home city of the first player's gorilla");
   Object.keys(LEVELS).forEach(function (k) { addOpt('lbCity', k, LEVELS[k].label); });
   Object.keys(DIFFICULTIES).forEach(function (k) { addOpt('lbDiff', k, DIFFICULTIES[k].label); });
   GAME.firstToOptions.forEach(function (n) { addOpt('lbFirst', String(n), 'First to ' + n); });
-  $('roomName').value = S.room || 'bananas';
+  ensureMe();
   try { document.addEventListener('visibilitychange', function () { if (NET.room && !document.hidden) { NET.hb = (NET.hb | 0) + 1; pub({ hb: NET.hb }); refreshNet(); } }); } catch (e) {}
   let hash = '';
   try { hash = (location.hash || '').replace('#', ''); } catch (e) {}
-  if (ROOM_RE.test(hash)) { joinRoom(hash); return; }
-  if (loadLast()) $('btnResume').hidden = false;
+  if (ROOM_RE.test(hash)) { homeAuto = true; joinRoom(hash); return; }
+  showHome();
 })();
 </script></body></html>
